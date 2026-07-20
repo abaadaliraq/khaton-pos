@@ -1,4 +1,4 @@
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+﻿export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
   public: {
@@ -220,6 +220,59 @@ export type Database = {
         };
         Update: Partial<Database["public"]["Tables"]["order_status_events"]["Insert"]>;
       };
+      staff_members: {
+        Row: {
+          id: string;
+          employee_number: number;
+          profile_id: string | null;
+          full_name: string;
+          phone: string | null;
+          secondary_phone: string | null;
+          job_title: string;
+          department: "service" | "cashier" | "kitchen" | "management" | "cleaning" | "barista" | "shisha" | "other";
+          employment_type: "full_time" | "part_time" | "temporary";
+          shift_type: "morning" | "evening" | "night" | "rotating" | "fixed";
+          hire_date: string | null;
+          birth_date: string | null;
+          salary: number | null;
+          address: string | null;
+          emergency_contact_name: string | null;
+          emergency_contact_phone: string | null;
+          notes: string | null;
+          status: "active" | "on_leave" | "inactive" | "terminated";
+          has_system_access: boolean;
+          created_by: string | null;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_number?: number;
+          profile_id?: string | null;
+          full_name: string;
+          phone?: string | null;
+          secondary_phone?: string | null;
+          job_title: string;
+          department: Database["public"]["Tables"]["staff_members"]["Row"]["department"];
+          employment_type?: Database["public"]["Tables"]["staff_members"]["Row"]["employment_type"];
+          shift_type?: Database["public"]["Tables"]["staff_members"]["Row"]["shift_type"];
+          hire_date?: string | null;
+          birth_date?: string | null;
+          salary?: number | null;
+          address?: string | null;
+          emergency_contact_name?: string | null;
+          emergency_contact_phone?: string | null;
+          notes?: string | null;
+          status?: Database["public"]["Tables"]["staff_members"]["Row"]["status"];
+          has_system_access?: boolean;
+          created_by?: string | null;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["staff_members"]["Insert"]>;
+      };
       audit_logs: {
         Row: {
           id: string;
@@ -247,6 +300,48 @@ export type Database = {
     Views: Record<string, never>;
     Functions: {
       current_user_role: { Args: Record<string, never>; Returns: string | null };
+      create_staff_member: {
+        Args: {
+          p_full_name: string;
+          p_phone?: string | null;
+          p_secondary_phone?: string | null;
+          p_job_title?: string | null;
+          p_department?: string;
+          p_employment_type?: string;
+          p_shift_type?: string;
+          p_hire_date?: string | null;
+          p_birth_date?: string | null;
+          p_salary?: number | null;
+          p_address?: string | null;
+          p_emergency_contact_name?: string | null;
+          p_emergency_contact_phone?: string | null;
+          p_notes?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["staff_members"]["Row"];
+      };
+      update_staff_member: {
+        Args: {
+          p_staff_id: string;
+          p_full_name: string;
+          p_phone?: string | null;
+          p_secondary_phone?: string | null;
+          p_job_title?: string | null;
+          p_department?: string;
+          p_employment_type?: string;
+          p_shift_type?: string;
+          p_hire_date?: string | null;
+          p_birth_date?: string | null;
+          p_salary?: number | null;
+          p_address?: string | null;
+          p_emergency_contact_name?: string | null;
+          p_emergency_contact_phone?: string | null;
+          p_notes?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["staff_members"]["Row"];
+      };
+      update_staff_status: { Args: { p_staff_id: string; p_status: string }; Returns: Database["public"]["Tables"]["staff_members"]["Row"] };
+      update_staff_system_access: { Args: { p_staff_id: string; p_is_active: boolean }; Returns: Database["public"]["Tables"]["staff_members"]["Row"] };
+      link_staff_system_profile: { Args: { p_staff_id: string; p_profile_id: string; p_username: string; p_role: string }; Returns: Database["public"]["Tables"]["staff_members"]["Row"] };
       create_restaurant_order: {
         Args: { p_table_id: string; p_items: Json; p_guest_count?: number | null; p_general_notes?: string | null };
         Returns: Json;
@@ -261,3 +356,4 @@ export type Database = {
     CompositeTypes: Record<string, never>;
   };
 };
+

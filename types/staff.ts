@@ -1,4 +1,4 @@
-export type StaffDepartment = "service" | "cashier" | "kitchen" | "management" | "cleaning" | "barista" | "shisha" | "other";
+﻿export type StaffDepartment = "service" | "cashier" | "kitchen" | "management" | "cleaning" | "barista" | "shisha" | "other";
 export type EmploymentType = "full_time" | "part_time" | "temporary";
 export type ShiftType = "morning" | "evening" | "night" | "rotating" | "fixed";
 export type StaffStatus = "active" | "on_leave" | "inactive" | "terminated";
@@ -64,33 +64,33 @@ export type StaffStatistics = {
 };
 
 export const departmentLabels: Record<StaffDepartment, string> = {
-  service: "??????",
-  cashier: "????????",
-  kitchen: "??????",
-  management: "???????",
-  cleaning: "???????",
-  barista: "????????",
-  shisha: "????????",
-  other: "????",
+  service: "الخدمة",
+  cashier: "المحاسبة",
+  kitchen: "المطبخ",
+  management: "الإدارة",
+  cleaning: "التنظيف",
+  barista: "البارستا",
+  shisha: "الأراكيل",
+  other: "أخرى",
 };
 
 export const employmentTypeLabels: Record<EmploymentType, string> = {
-  full_time: "???? ????",
-  part_time: "???? ????",
-  temporary: "????",
+  full_time: "دوام كامل",
+  part_time: "دوام جزئي",
+  temporary: "مؤقت",
 };
 
 export const shiftTypeLabels: Record<ShiftType, string> = {
-  morning: "?????",
-  evening: "?????",
-  night: "????",
-  rotating: "??????",
-  fixed: "????",
+  morning: "صباحية",
+  evening: "مسائية",
+  night: "ليلية",
+  rotating: "متغيرة",
+  fixed: "ثابتة",
 };
 
 export const staffStatusLabels: Record<StaffStatus, string> = {
-  active: "???",
-  on_leave: "?? ?????",
-  inactive: "??? ???",
-  terminated: "?????",
+  active: "نشط",
+  on_leave: "في إجازة",
+  inactive: "غير نشط",
+  terminated: "منتهي",
 };
