@@ -1,0 +1,195 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CompletedOrdersDialog } from "@/components/kitchen/CompletedOrdersDialog";
+import { KitchenBoard } from "@/components/kitchen/KitchenBoard";
+import { KitchenHeader } from "@/components/kitchen/KitchenHeader";
+import { KitchenOrderDetails } from "@/components/kitchen/KitchenOrderDetails";
+import { KitchenStats } from "@/components/kitchen/KitchenStats";
+import { KitchenToast } from "@/components/kitchen/KitchenToast";
+import { KitchenToolbar } from "@/components/kitchen/KitchenToolbar";
+import { kitchenActiveStatuses } from "@/config/kitchen";
+import { isKitchenOrderLate, matchesKitchenFilter, matchesKitchenSearch } from "@/lib/kitchenOrders";
+import { getKitchenOrders, updateKitchenOrderStatus } from "@/services/kitchenService";
+import type { UserSession } from "@/types/auth";
+import type { KitchenFilter, KitchenOrder, KitchenOrderStatus } from "@/types/kitchen";
+
+type AudioWindow = Window &
+  typeof globalThis & {
+    webkitAudioContext?: typeof AudioContext;
+  };
+
+type KitchenScreenProps = {
+  session: UserSession;
+};
+
+export function KitchenScreen({ session }: KitchenScreenProps) {
+  const [orders, setOrders] = useState<KitchenOrder[]>([]);
+  const [now, setNow] = useState(0);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filter, setFilter] = useState<KitchenFilter>("all");
+  const [activeMobileStatus, setActiveMobileStatus] = useState<KitchenOrderStatus>("new");
+  const [selectedOrder, setSelectedOrder] = useState<KitchenOrder | null>(null);
+  const [isCompletedOpen, setIsCompletedOpen] = useState(false);
+  const [toast, setToast] = useState("");
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  function showToast(message: string) {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 2800);
+  }
+
+  async function refreshOrders() {
+    const nextOrders = await getKitchenOrders();
+    setOrders(nextOrders);
+    setNow(Date.now());
+  }
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadOrders() {
+      try {
+        const nextOrders = await getKitchenOrders();
+
+        if (!isMounted) {
+          return;
+        }
+
+        setOrders(nextOrders);
+        setNow(Date.now());
+      } catch (error) {
+        console.error("Failed to load kitchen orders", error);
+
+        if (isMounted) {
+          showToast("تعذر تحميل طلبات المطبخ من Supabase.");
+        }
+      }
+    }
+
+    void loadOrders();
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const visibleOrders = useMemo(() => {
+    return orders
+      .filter((order) => kitchenActiveStatuses.includes(order.status))
+      .filter((order) => matchesKitchenSearch(order, searchTerm))
+      .filter((order) => matchesKitchenFilter(order, filter, now))
+      .sort((first, second) => {
+        const firstLate = isKitchenOrderLate(first, now) ? 1 : 0;
+        const secondLate = isKitchenOrderLate(second, now) ? 1 : 0;
+        const firstPriority = first.priority === "priority" ? 1 : 0;
+        const secondPriority = second.priority === "priority" ? 1 : 0;
+
+        return (
+          secondLate - firstLate ||
+          secondPriority - firstPriority ||
+          new Date(first.timing.receivedAt).getTime() - new Date(second.timing.receivedAt).getTime()
+        );
+      });
+  }, [filter, now, orders, searchTerm]);
+
+  const stats = useMemo(() => {
+    return {
+      newCount: orders.filter((order) => order.status === "new").length,
+      preparingCount: orders.filter((order) => order.status === "preparing").length,
+      readyCount: orders.filter((order) => order.status === "ready").length,
+      lateCount: orders.filter((order) => isKitchenOrderLate(order, now)).length,
+    };
+  }, [now, orders]);
+
+  function playNewOrderTone() {
+    if (!soundEnabled) {
+      return;
+    }
+
+    const audioWindow = window as AudioWindow;
+    const AudioContextConstructor = audioWindow.AudioContext || audioWindow.webkitAudioContext;
+
+    if (!AudioContextConstructor) {
+      return;
+    }
+
+    const context = audioContextRef.current ?? new AudioContextConstructor();
+    audioContextRef.current = context;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.frequency.value = 880;
+    gain.gain.value = 0.08;
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.16);
+  }
+
+  async function changeStatus(orderId: string, nextStatus: KitchenOrderStatus) {
+    if (nextStatus === "new" || nextStatus === "cancelled") {
+      return;
+    }
+
+    try {
+      await updateKitchenOrderStatus(orderId, nextStatus);
+      await refreshOrders();
+      showToast(nextStatus === "preparing" ? "بدأ التحضير" : nextStatus === "ready" ? "تم تحويل الطلب إلى جاهز" : "تم تسليم الطلب");
+    } catch (error) {
+      console.error("Failed to update kitchen status", error);
+      showToast("تعذر تحديث حالة الطلب في Supabase.");
+    }
+  }
+
+  async function refreshFromDatabase() {
+    try {
+      await refreshOrders();
+      playNewOrderTone();
+      showToast("تم تحديث طلبات المطبخ");
+    } catch (error) {
+      console.error("Failed to refresh kitchen orders", error);
+      showToast("تعذر تحديث شاشة المطبخ.");
+    }
+  }
+
+  return (
+    <div dir="rtl" className="min-h-screen bg-[#171513] text-[#FFF8EE]">
+      <KitchenHeader
+        session={session}
+        soundEnabled={soundEnabled}
+        onToggleSound={() => setSoundEnabled((current) => !current)}
+        onOpenCompleted={() => setIsCompletedOpen(true)}
+        onAddDemoOrder={refreshFromDatabase}
+        onResetDemoData={refreshFromDatabase}
+      />
+
+      <main className="mx-auto max-w-[1800px] space-y-4 px-4 py-4">
+        <KitchenStats {...stats} />
+        <KitchenToolbar
+          searchTerm={searchTerm}
+          filter={filter}
+          onSearchChange={setSearchTerm}
+          onFilterChange={setFilter}
+          onRefresh={() => {
+            void refreshFromDatabase();
+          }}
+        />
+        <KitchenBoard
+          orders={visibleOrders}
+          activeMobileStatus={activeMobileStatus}
+          now={now}
+          onMobileStatusChange={setActiveMobileStatus}
+          onStatusChange={changeStatus}
+          onOpenDetails={setSelectedOrder}
+        />
+      </main>
+
+      <KitchenOrderDetails order={selectedOrder} now={now} onClose={() => setSelectedOrder(null)} />
+      <CompletedOrdersDialog orders={orders} isOpen={isCompletedOpen} onClose={() => setIsCompletedOpen(false)} />
+      <KitchenToast message={toast} />
+    </div>
+  );
+}

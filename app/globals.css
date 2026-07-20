@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f7f4ed;
+  --foreground: #1c1917;
 }
 
 @theme inline {
@@ -12,15 +12,71 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+@media print {
+  body {
+    background: #ffffff;
+  }
+
+  .cashier-no-print {
+    display: none !important;
+  }
+
+  .cashier-print-receipt {
+    display: block !important;
+    width: 72mm;
+    margin: 0 auto;
+    color: #111111;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .cashier-print-receipt h1 {
+    margin: 0 0 8px;
+    text-align: center;
+    font-size: 16px;
+  }
+
+  .cashier-print-receipt p {
+    margin: 4px 0;
+  }
+
+  .cashier-print-receipt hr {
+    margin: 8px 0;
+    border: 0;
+    border-top: 1px dashed #111111;
+  }
+
+  .receipt-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 4px 0;
+  }
+
+  .receipt-thanks {
+    margin-top: 12px !important;
+    text-align: center;
+    font-weight: 700;
+  }
 }
