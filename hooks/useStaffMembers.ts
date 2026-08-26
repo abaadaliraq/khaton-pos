@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { logSupabaseError } from "@/lib/supabaseError";
 import { getStaffMembers, getStaffStatistics } from "@/services/staffService";
 import type { StaffMember } from "@/types/staff";
 
@@ -16,7 +17,7 @@ export function useStaffMembers() {
       const members = await getStaffMembers();
       setStaff(members);
     } catch (loadError) {
-      console.error("Failed to load staff members", loadError);
+      logSupabaseError("Failed to load staff members", loadError);
       setError("تعذر تحميل بيانات العمال");
     } finally {
       setIsLoading(false);
@@ -34,7 +35,7 @@ export function useStaffMembers() {
         setError("");
       } catch (loadError) {
         if (!isMounted) return;
-        console.error("Failed to load staff members", loadError);
+        logSupabaseError("Failed to load staff members", loadError);
         setError("تعذر تحميل بيانات العمال");
       } finally {
         if (isMounted) setIsLoading(false);

@@ -1,4 +1,4 @@
-﻿export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
   public: {
@@ -8,7 +8,7 @@ export type Database = {
           id: string;
           username: string;
           full_name: string;
-          role: "captain" | "cashier" | "kitchen" | "admin";
+          role: "captain" | "cashier" | "kitchen" | "admin" | "storekeeper" | "accountant";
           status: "active" | "inactive" | "suspended";
           created_at: string;
           updated_at: string;
@@ -17,7 +17,7 @@ export type Database = {
           id: string;
           username: string;
           full_name: string;
-          role: "captain" | "cashier" | "kitchen" | "admin";
+          role: "captain" | "cashier" | "kitchen" | "admin" | "storekeeper" | "accountant";
           status?: "active" | "inactive" | "suspended";
           created_at?: string;
           updated_at?: string;
@@ -229,7 +229,7 @@ export type Database = {
           phone: string | null;
           secondary_phone: string | null;
           job_title: string;
-          department: "service" | "cashier" | "kitchen" | "management" | "cleaning" | "barista" | "shisha" | "other";
+          department: "service" | "cashier" | "kitchen" | "management" | "cleaning" | "barista" | "shisha" | "inventory" | "finance" | "other";
           employment_type: "full_time" | "part_time" | "temporary";
           shift_type: "morning" | "evening" | "night" | "rotating" | "fixed";
           hire_date: string | null;
@@ -272,6 +272,114 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["staff_members"]["Insert"]>;
+      };
+      expenses: {
+        Row: {
+          id: string;
+          expense_number: number;
+          amount: number;
+          category: "electricity" | "water" | "internet" | "generator" | "maintenance" | "cleaning" | "transport" | "marketing" | "external_services" | "other";
+          expense_date: string;
+          payment_method: "cash" | "card" | "transfer";
+          receipt_number: string | null;
+          description: string;
+          notes: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          expense_number?: number;
+          amount: number;
+          category: Database["public"]["Tables"]["expenses"]["Row"]["category"];
+          expense_date?: string;
+          payment_method: Database["public"]["Tables"]["expenses"]["Row"]["payment_method"];
+          receipt_number?: string | null;
+          description: string;
+          notes?: string | null;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["expenses"]["Insert"]>;
+      };
+      suppliers: {
+        Row: {
+          id: string;
+          name: string;
+          phone: string | null;
+          address: string | null;
+          notes: string | null;
+          is_active: boolean;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          phone?: string | null;
+          address?: string | null;
+          notes?: string | null;
+          is_active?: boolean;
+          created_by?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["suppliers"]["Insert"]>;
+      };
+      purchases: {
+        Row: {
+          id: string;
+          purchase_number: number;
+          client_request_id: string;
+          supplier_id: string;
+          supplier_invoice_number: string | null;
+          supplier_invoice_date: string | null;
+          total_amount: number;
+          notes: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          purchase_number?: number;
+          client_request_id: string;
+          supplier_id: string;
+          supplier_invoice_number?: string | null;
+          supplier_invoice_date?: string | null;
+          total_amount?: number;
+          notes?: string | null;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["purchases"]["Insert"]>;
+      };
+      purchase_items: {
+        Row: {
+          id: string;
+          purchase_id: string;
+          inventory_item_id: string;
+          quantity: number;
+          unit_id: string;
+          unit_price: number;
+          line_total: number;
+          quantity_base: number;
+          unit_cost_base: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          purchase_id: string;
+          inventory_item_id: string;
+          quantity: number;
+          unit_id: string;
+          unit_price: number;
+          line_total: number;
+          quantity_base: number;
+          unit_cost_base: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["purchase_items"]["Insert"]>;
       };
       audit_logs: {
         Row: {
@@ -342,6 +450,28 @@ export type Database = {
       update_staff_status: { Args: { p_staff_id: string; p_status: string }; Returns: Database["public"]["Tables"]["staff_members"]["Row"] };
       update_staff_system_access: { Args: { p_staff_id: string; p_is_active: boolean }; Returns: Database["public"]["Tables"]["staff_members"]["Row"] };
       link_staff_system_profile: { Args: { p_staff_id: string; p_profile_id: string; p_username: string; p_role: string }; Returns: Database["public"]["Tables"]["staff_members"]["Row"] };
+      create_expense: {
+        Args: {
+          p_amount: number;
+          p_category: string;
+          p_payment_method: string;
+          p_receipt_number?: string | null;
+          p_description?: string | null;
+          p_notes?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["expenses"]["Row"];
+      };
+      create_inventory_purchase: {
+        Args: {
+          p_client_request_id: string;
+          p_supplier_id: string;
+          p_supplier_invoice_number?: string | null;
+          p_supplier_invoice_date?: string | null;
+          p_notes?: string | null;
+          p_items?: Json;
+        };
+        Returns: Json;
+      };
       create_restaurant_order: {
         Args: { p_table_id: string; p_items: Json; p_guest_count?: number | null; p_general_notes?: string | null };
         Returns: Json;

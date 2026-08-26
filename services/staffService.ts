@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { createClient } from "@/lib/supabase/client";
+import { logSupabaseError } from "@/lib/supabaseError";
 import type { CreateStaffInput, StaffMember, StaffStatistics, StaffStatus, SystemRole, UpdateStaffInput } from "@/types/staff";
 
 type StaffRow = {
@@ -60,19 +61,25 @@ function rowToStaff(row: StaffRow): StaffMember {
   };
 }
 
-const staffSelect = "id, employee_number, profile_id, full_name, phone, secondary_phone, job_title, department, employment_type, shift_type, hire_date, birth_date, salary, address, emergency_contact_name, emergency_contact_phone, notes, status, has_system_access, created_at, updated_at, profile:profiles(username, role, status)";
+const staffSelect = "id, employee_number, profile_id, full_name, phone, secondary_phone, job_title, department, employment_type, shift_type, hire_date, birth_date, salary, address, emergency_contact_name, emergency_contact_phone, notes, status, has_system_access, created_at, updated_at, profile:profiles!staff_members_profile_id_fkey(username, role, status)";
 
 export async function getStaffMembers() {
   const supabase = createClient();
   const { data, error } = await supabase.from("staff_members" as never).select(staffSelect).order("employee_number", { ascending: true });
-  if (error) throw error;
+  if (error) {
+    logSupabaseError("[staff_members SELECT]", error);
+    throw error;
+  }
   return ((data ?? []) as unknown as StaffRow[]).map(rowToStaff);
 }
 
 export async function getStaffMemberById(id: string) {
   const supabase = createClient();
   const { data, error } = await supabase.from("staff_members" as never).select(staffSelect).eq("id", id).maybeSingle();
-  if (error) throw error;
+  if (error) {
+    logSupabaseError("[staff_members SELECT by id]", error);
+    throw error;
+  }
   return data ? rowToStaff(data as unknown as StaffRow) : null;
 }
 
@@ -106,28 +113,40 @@ function rpcPayload(input: CreateStaffInput) {
 export async function createStaffMember(input: CreateStaffInput) {
   const supabase = createClient();
   const { data, error } = await supabase.rpc("create_staff_member" as never, rpcPayload(input) as never);
-  if (error) throw error;
+  if (error) {
+    logSupabaseError("[staff create RPC create_staff_member]", error);
+    throw error;
+  }
   return getStaffMemberAfterMutation(data);
 }
 
 export async function updateStaffMember(input: UpdateStaffInput) {
   const supabase = createClient();
   const { data, error } = await supabase.rpc("update_staff_member" as never, { p_staff_id: input.id, ...rpcPayload(input) } as never);
-  if (error) throw error;
+  if (error) {
+    logSupabaseError("[staff update RPC update_staff_member]", error);
+    throw error;
+  }
   return getStaffMemberAfterMutation(data);
 }
 
 export async function updateStaffStatus(id: string, status: StaffStatus) {
   const supabase = createClient();
   const { data, error } = await supabase.rpc("update_staff_status" as never, { p_staff_id: id, p_status: status } as never);
-  if (error) throw error;
+  if (error) {
+    logSupabaseError("[staff status RPC update_staff_status]", error);
+    throw error;
+  }
   return getStaffMemberAfterMutation(data);
 }
 
 export async function updateStaffSystemAccess(id: string, isActive: boolean) {
   const supabase = createClient();
   const { data, error } = await supabase.rpc("update_staff_system_access" as never, { p_staff_id: id, p_is_active: isActive } as never);
-  if (error) throw error;
+  if (error) {
+    logSupabaseError("[staff system access RPC update_staff_system_access]", error);
+    throw error;
+  }
   return getStaffMemberAfterMutation(data);
 }
 
@@ -148,8 +167,20 @@ export async function createStaffSystemAccount(input: { staffId: string; usernam
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  const payload = (await response.json()) as { error?: string; staff?: StaffRow };
-  if (!response.ok) throw new Error(payload.error ?? "تعذر إنشاء حساب النظام");
+
+  const responseText = await response.text();
+  let payload: { error?: unknown; staff?: StaffRow } = {};
+  try {
+    payload = responseText ? JSON.parse(responseText) as { error?: unknown; staff?: StaffRow } : {};
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    console.error(`[staff account API create-account] status=${response.status} body=${responseText || "-"}`);
+    throw new Error(typeof payload.error === "string" ? payload.error : `تعذر إنشاء حساب النظام. رمز الاستجابة ${response.status}`);
+  }
+
   if (!payload.staff) throw new Error("لم يرجع الخادم سجل العامل");
   return rowToStaff(payload.staff);
 }

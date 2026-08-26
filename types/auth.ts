@@ -1,4 +1,4 @@
-export type UserRole = "captain" | "cashier" | "kitchen" | "admin";
+export type UserRole = "captain" | "cashier" | "kitchen" | "admin" | "storekeeper" | "accountant";
 
 export type MockUser = {
   username: string;

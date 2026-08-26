@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BillPanel } from "@/components/cashier/BillPanel";
 import { CashierFilters, type CashierFilter } from "@/components/cashier/CashierFilters";
 import { CashierHeader } from "@/components/cashier/CashierHeader";
@@ -13,6 +13,7 @@ import { PrintReceipt } from "@/components/cashier/PrintReceipt";
 import { ShiftSummaryDialog } from "@/components/cashier/ShiftSummaryDialog";
 import { TablesGrid } from "@/components/cashier/TablesGrid";
 import { getBillTotals, getShiftSummary } from "@/lib/cashierCalculations";
+import { createClient } from "@/lib/supabase/client";
 import { getCashierTables } from "@/services/cashierService";
 import { applyOrderDiscount, closePaidTable, recordOrderPayment } from "@/services/paymentService";
 import type { UserSession } from "@/types/auth";
@@ -35,13 +36,14 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isCloseTableOpen, setIsCloseTableOpen] = useState(false);
   const [printOrder, setPrintOrder] = useState<CashierOrder | null>(null);
+  const realtimeReloadTimerRef = useRef<number | null>(null);
 
   function showMessage(nextMessage: string) {
     setMessage(nextMessage);
     window.setTimeout(() => setMessage(""), 3200);
   }
 
-  async function reloadTables() {
+  const reloadTables = useCallback(async () => {
     const nextTables = await getCashierTables();
     setTables(nextTables);
     setSelectedTableId(
@@ -51,8 +53,7 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
         nextTables[0]?.id ??
         null,
     );
-  }
-
+  }, []);
   useEffect(() => {
     let isMounted = true;
 
@@ -81,6 +82,56 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const supabase = createClient();
+
+    function scheduleReload() {
+      if (realtimeReloadTimerRef.current) {
+        window.clearTimeout(realtimeReloadTimerRef.current);
+      }
+
+      realtimeReloadTimerRef.current = window.setTimeout(() => {
+        realtimeReloadTimerRef.current = null;
+
+        if (!isMounted) {
+          return;
+        }
+
+        reloadTables().catch((error) => {
+          console.error("Failed to reload cashier data after realtime change", error);
+        });
+      }, 200);
+    }
+
+    const channel = supabase
+      .channel("cashier-order-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, scheduleReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, scheduleReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "restaurant_tables" }, scheduleReload)
+      .subscribe((status, error) => {
+        if (error) {
+          console.error("Cashier realtime subscription error", error);
+        }
+
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.error("Cashier realtime subscription failed", { status });
+        }
+      });
+
+    return () => {
+      isMounted = false;
+
+      if (realtimeReloadTimerRef.current) {
+        window.clearTimeout(realtimeReloadTimerRef.current);
+        realtimeReloadTimerRef.current = null;
+      }
+
+      void supabase.removeChannel(channel);
+    };
+  }, [reloadTables]);
 
   const selectedTable = useMemo(
     () => tables.find((table) => table.id === selectedTableId) ?? null,

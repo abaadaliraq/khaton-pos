@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CompletedOrdersDialog } from "@/components/kitchen/CompletedOrdersDialog";
 import { KitchenBoard } from "@/components/kitchen/KitchenBoard";
 import { KitchenHeader } from "@/components/kitchen/KitchenHeader";
@@ -10,6 +10,7 @@ import { KitchenToast } from "@/components/kitchen/KitchenToast";
 import { KitchenToolbar } from "@/components/kitchen/KitchenToolbar";
 import { kitchenActiveStatuses } from "@/config/kitchen";
 import { isKitchenOrderLate, matchesKitchenFilter, matchesKitchenSearch } from "@/lib/kitchenOrders";
+import { createClient } from "@/lib/supabase/client";
 import { getKitchenOrders, updateKitchenOrderStatus } from "@/services/kitchenService";
 import type { UserSession } from "@/types/auth";
 import type { KitchenFilter, KitchenOrder, KitchenOrderStatus } from "@/types/kitchen";
@@ -23,6 +24,22 @@ type KitchenScreenProps = {
   session: UserSession;
 };
 
+function getKitchenStatusErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+
+  if (message.includes("INSUFFICIENT_INVENTORY")) {
+    const [, itemName] = message.split(":");
+    return `لا يمكن بدء التحضير: مخزون ${itemName || "إحدى المواد"} غير كافٍ.`;
+  }
+
+  if (message.includes("INVENTORY_RECIPE_MISSING") || message.includes("INVENTORY_RECIPE_EMPTY")) {
+    const [, itemName] = message.split(":");
+    return `لا يمكن بدء التحضير: يجب إعداد وصفة صالحة للصنف ${itemName || "المتتبع"}.`;
+  }
+
+  return "تعذر تحديث حالة الطلب في Supabase.";
+}
+
 export function KitchenScreen({ session }: KitchenScreenProps) {
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
   const [now, setNow] = useState(0);
@@ -34,18 +51,18 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
   const [toast, setToast] = useState("");
   const [soundEnabled, setSoundEnabled] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const realtimeRefreshTimerRef = useRef<number | null>(null);
 
   function showToast(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 2800);
   }
 
-  async function refreshOrders() {
+  const refreshOrders = useCallback(async () => {
     const nextOrders = await getKitchenOrders();
     setOrders(nextOrders);
     setNow(Date.now());
-  }
-
+  }, []);
   useEffect(() => {
     let isMounted = true;
 
@@ -76,6 +93,54 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const supabase = createClient();
+
+    function scheduleRefresh() {
+      if (realtimeRefreshTimerRef.current) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+      }
+
+      realtimeRefreshTimerRef.current = window.setTimeout(() => {
+        realtimeRefreshTimerRef.current = null;
+
+        if (!isMounted) {
+          return;
+        }
+
+        refreshOrders().catch((error) => {
+          console.error("Failed to refresh kitchen orders after realtime change", error);
+        });
+      }, 200);
+    }
+
+    const channel = supabase
+      .channel("kitchen-order-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, scheduleRefresh)
+      .subscribe((status, error) => {
+        if (error) {
+          console.error("Kitchen realtime subscription error", error);
+        }
+
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.error("Kitchen realtime subscription failed", { status });
+        }
+      });
+
+    return () => {
+      isMounted = false;
+
+      if (realtimeRefreshTimerRef.current) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
+
+      void supabase.removeChannel(channel);
+    };
+  }, [refreshOrders]);
 
   const visibleOrders = useMemo(() => {
     return orders
@@ -140,7 +205,7 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
       showToast(nextStatus === "preparing" ? "بدأ التحضير" : nextStatus === "ready" ? "تم تحويل الطلب إلى جاهز" : "تم تسليم الطلب");
     } catch (error) {
       console.error("Failed to update kitchen status", error);
-      showToast("تعذر تحديث حالة الطلب في Supabase.");
+      showToast(getKitchenStatusErrorMessage(error));
     }
   }
 

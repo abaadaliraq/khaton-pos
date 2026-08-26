@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { logSupabaseError } from "@/lib/supabaseError";
 import type { CreateStaffInput, StaffMember } from "@/types/staff";
 import { departmentLabels, employmentTypeLabels, shiftTypeLabels } from "@/types/staff";
 
@@ -49,11 +50,13 @@ export function StaffForm({ member, submitLabel, onCancel, onSubmit }: { member?
   const initial = useMemo(() => fromMember(member), [member]);
   const [form, setForm] = useState<CreateStaffInput>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   function update<K extends keyof CreateStaffInput>(key: K, value: CreateStaffInput[K]) {
     setForm((current) => ({ ...current, [key]: value }));
     setErrors((current) => ({ ...current, [key]: "" }));
+    setSubmitError("");
   }
 
   function validate() {
@@ -75,8 +78,12 @@ export function StaffForm({ member, submitLabel, onCancel, onSubmit }: { member?
     event.preventDefault();
     if (!validate() || isSaving) return;
     setIsSaving(true);
+    setSubmitError("");
     try {
       await onSubmit(form);
+    } catch (saveError) {
+      logSupabaseError("[staff form submit]", saveError);
+      setSubmitError("تعذر حفظ بيانات العامل. راجع الاتصال أو صلاحيات قاعدة البيانات ثم حاول مرة أخرى.");
     } finally {
       setIsSaving(false);
     }
@@ -126,6 +133,7 @@ export function StaffForm({ member, submitLabel, onCancel, onSubmit }: { member?
         <button type="button" onClick={onCancel} className="h-11 rounded-md border border-[#e4d8c8] bg-white px-4 text-sm font-medium text-[#4a3b34] hover:bg-[#f5eee6]">إلغاء</button>
         <button type="submit" disabled={isSaving} className="h-11 rounded-md bg-[#5d4032] px-5 text-sm font-semibold text-white hover:bg-[#463025] disabled:bg-stone-300">{isSaving ? "جارٍ الحفظ..." : submitLabel}</button>
       </div>
+      {submitError ? <p className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{submitError}</p> : null}
     </form>
   );
 }

@@ -1,6 +1,7 @@
 ﻿import { departmentLabels, employmentTypeLabels, shiftTypeLabels, type StaffMember } from "@/types/staff";
 import { StaffStatusBadge } from "@/components/admin/StaffStatusBadge";
 import { formatCurrency } from "@/lib/formatCurrency";
+import { getRoleLabel } from "@/lib/auth";
 
 function dateValue(value: string | null) {
   return value ? new Intl.DateTimeFormat("ar-IQ", { dateStyle: "medium" }).format(new Date(value)) : "-";
@@ -38,7 +39,7 @@ export function StaffDetails({ member }: { member: StaffMember }) {
         <Info label="هاتف الطوارئ" value={member.emergencyContactPhone} />
         <Info label="دخول النظام" value={member.hasSystemAccess ? "نعم" : "لا"} />
         <Info label="اسم المستخدم" value={member.profile?.username} />
-        <Info label="دور النظام" value={member.profile?.role} />
+        <Info label="دور النظام" value={member.profile?.role ? getRoleLabel(member.profile.role) : null} />
         <Info label="تاريخ إنشاء السجل" value={dateValue(member.createdAt)} />
         <Info label="آخر تحديث" value={dateValue(member.updatedAt)} />
       </section>

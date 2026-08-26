@@ -18,7 +18,7 @@ type StaffFiltersProps = {
 };
 
 const statuses: StaffStatus[] = ["active", "on_leave", "inactive", "terminated"];
-const departments: StaffDepartment[] = ["service", "cashier", "kitchen", "management", "cleaning", "barista", "shisha", "other"];
+const departments: StaffDepartment[] = ["service", "cashier", "kitchen", "management", "cleaning", "barista", "shisha", "inventory", "finance", "other"];
 const employmentTypes: EmploymentType[] = ["full_time", "part_time", "temporary"];
 
 export function StaffFilters({ filters, onChange }: StaffFiltersProps) {

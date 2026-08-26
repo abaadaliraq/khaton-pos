@@ -7,11 +7,12 @@ import { clearLegacyMockStorage, getCurrentSession, getSupabaseSetupError } from
 import type { UserRole, UserSession } from "@/types/auth";
 
 type AuthGuardProps = {
-  allowedRole: UserRole;
+  allowedRole: UserRole | UserRole[];
+  loginPath?: string;
   children: ReactNode | ((session: UserSession) => ReactNode);
 };
 
-export function AuthGuard({ allowedRole, children }: AuthGuardProps) {
+export function AuthGuard({ allowedRole, loginPath = "/login", children }: AuthGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [session, setSession] = useState<UserSession | null>(null);
@@ -41,13 +42,15 @@ export function AuthGuard({ allowedRole, children }: AuthGuardProps) {
         }
 
         if (!currentSession) {
-          if (pathname !== "/login") {
-            router.replace("/login");
+          if (pathname !== loginPath) {
+            router.replace(loginPath);
           }
           return;
         }
 
-        if (currentSession.role !== allowedRole) {
+        const allowedRoles = Array.isArray(allowedRole) ? allowedRole : [allowedRole];
+
+        if (!allowedRoles.includes(currentSession.role)) {
           const redirectPath = getRoleRedirectPath(currentSession.role);
 
           if (pathname !== redirectPath) {
@@ -73,7 +76,7 @@ export function AuthGuard({ allowedRole, children }: AuthGuardProps) {
     return () => {
       isMounted = false;
     };
-  }, [allowedRole, pathname, router, setupError]);
+  }, [allowedRole, loginPath, pathname, router, setupError]);
 
   if (isChecking || !session) {
     return (

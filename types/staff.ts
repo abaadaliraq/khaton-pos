@@ -1,8 +1,8 @@
-﻿export type StaffDepartment = "service" | "cashier" | "kitchen" | "management" | "cleaning" | "barista" | "shisha" | "other";
+﻿export type StaffDepartment = "service" | "cashier" | "kitchen" | "management" | "cleaning" | "barista" | "shisha" | "inventory" | "finance" | "other";
 export type EmploymentType = "full_time" | "part_time" | "temporary";
 export type ShiftType = "morning" | "evening" | "night" | "rotating" | "fixed";
 export type StaffStatus = "active" | "on_leave" | "inactive" | "terminated";
-export type SystemRole = "captain" | "cashier" | "kitchen" | "admin";
+export type SystemRole = "captain" | "cashier" | "kitchen" | "admin" | "storekeeper" | "accountant";
 
 export type StaffProfileSummary = {
   username: string;
@@ -71,6 +71,8 @@ export const departmentLabels: Record<StaffDepartment, string> = {
   cleaning: "التنظيف",
   barista: "البارستا",
   shisha: "الأراكيل",
+  inventory: "المخزن",
+  finance: "الحسابات",
   other: "أخرى",
 };
 

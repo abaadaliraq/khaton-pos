@@ -16,6 +16,8 @@ export function getRoleRedirectPath(role: UserRole) {
     cashier: "/cashier",
     kitchen: "/kitchen",
     admin: "/admin",
+    storekeeper: "/inventory",
+    accountant: "/finance",
   };
 
   return paths[role];
@@ -27,6 +29,8 @@ export function getRoleLabel(role: UserRole) {
     cashier: "المحاسب",
     kitchen: "المطبخ",
     admin: "الإدارة",
+    storekeeper: "مسؤول المخزن",
+    accountant: "محاسب",
   };
 
   return labels[role];

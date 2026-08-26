@@ -79,4 +79,38 @@ button:disabled {
     text-align: center;
     font-weight: 700;
   }
+
+  @page {
+    size: A5 portrait;
+    margin: 12mm;
+  }
+
+  body:has(.finance-payment-voucher) *,
+  body:has(.finance-expense-voucher) * {
+    visibility: hidden !important;
+  }
+
+  body:has(.finance-payment-voucher) .finance-payment-voucher,
+  body:has(.finance-payment-voucher) .finance-payment-voucher *,
+  body:has(.finance-expense-voucher) .finance-expense-voucher,
+  body:has(.finance-expense-voucher) .finance-expense-voucher * {
+    visibility: visible !important;
+  }
+
+  body:has(.finance-payment-voucher) .finance-payment-voucher,
+  body:has(.finance-expense-voucher) .finance-expense-voucher {
+    position: fixed !important;
+    inset: 0 !important;
+    width: auto !important;
+    max-width: none !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  body:has(.finance-payment-voucher) .finance-payment-voucher-actions,
+  body:has(.finance-expense-voucher) .finance-expense-voucher-actions {
+    display: none !important;
+  }
 }

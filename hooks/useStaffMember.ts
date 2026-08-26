@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
+import { logSupabaseError } from "@/lib/supabaseError";
 import { getStaffMemberById } from "@/services/staffService";
 import type { StaffMember } from "@/types/staff";
 
@@ -17,7 +18,7 @@ export function useStaffMember(id: string) {
       setStaffMember(member);
       if (!member) setError("لم يتم العثور على العامل");
     } catch (loadError) {
-      console.error("Failed to load staff member", loadError);
+      logSupabaseError("Failed to load staff member", loadError);
       setError("تعذر تحميل بيانات العامل");
     } finally {
       setIsLoading(false);
@@ -35,7 +36,7 @@ export function useStaffMember(id: string) {
         setError(member ? "" : "لم يتم العثور على العامل");
       } catch (loadError) {
         if (!isMounted) return;
-        console.error("Failed to load staff member", loadError);
+        logSupabaseError("Failed to load staff member", loadError);
         setError("تعذر تحميل بيانات العامل");
       } finally {
         if (isMounted) setIsLoading(false);

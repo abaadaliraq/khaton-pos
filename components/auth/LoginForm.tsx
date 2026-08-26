@@ -10,17 +10,31 @@ import {
   getSupabaseSetupError,
   signInWithUsername,
 } from "@/services/authService";
+import type { UserRole } from "@/types/auth";
 
 const demoAccounts = [
   ["الكابتن", "captain"],
   ["المحاسب", "cashier"],
   ["المطبخ", "kitchen"],
   ["الإدارة", "admin"],
+  ["مسؤول المخزن", "storekeeper"],
+  ["محاسب", "accountant"],
 ];
 
 const invalidLoginMessage = "اسم المستخدم أو كلمة المرور غير صحيحة";
 
-export function LoginForm() {
+type LoginFormProps = {
+  title?: string;
+  subtitle?: string;
+  allowedRoles?: UserRole[];
+  loginPath?: string;
+};
+
+export function LoginForm({
+  title = "خاتون / KHATOUN",
+  subtitle = "نظام إدارة المطعم",
+  allowedRoles,
+}: LoginFormProps) {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -51,6 +65,11 @@ export function LoginForm() {
         }
 
         if (currentSession) {
+          if (allowedRoles && !allowedRoles.includes(currentSession.role)) {
+            router.replace(getRoleRedirectPath(currentSession.role));
+            return;
+          }
+
           router.replace(getRoleRedirectPath(currentSession.role));
           return;
         }
@@ -68,7 +87,7 @@ export function LoginForm() {
     return () => {
       isMounted = false;
     };
-  }, [router, setupError]);
+  }, [allowedRoles, router, setupError]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -86,6 +105,11 @@ export function LoginForm() {
 
       if (!session) {
         setError(invalidLoginMessage);
+        return;
+      }
+
+      if (allowedRoles && !allowedRoles.includes(session.role)) {
+        router.replace(getRoleRedirectPath(session.role));
         return;
       }
 
@@ -123,8 +147,8 @@ export function LoginForm() {
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-[#4c5a35] text-base font-bold text-white">
           خ
         </div>
-        <h1 className="mt-4 text-2xl font-semibold text-stone-950">خاتون / KHATOUN</h1>
-        <p className="mt-2 text-sm text-stone-500">نظام إدارة المطعم</p>
+        <h1 className="mt-4 text-2xl font-semibold text-stone-950">{title}</h1>
+        <p className="mt-2 text-sm text-stone-500">{subtitle}</p>
       </div>
 
       <div className="mt-6 space-y-4">

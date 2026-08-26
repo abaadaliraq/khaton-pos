@@ -2,10 +2,18 @@
 
 import { Eye, EyeOff } from "lucide-react";
 import { FormEvent, useState } from "react";
+import { logSupabaseError } from "@/lib/supabaseError";
 import { createStaffSystemAccount } from "@/services/staffService";
 import type { StaffMember, SystemRole } from "@/types/staff";
 
-const roles: SystemRole[] = ["captain", "cashier", "kitchen", "admin"];
+const roles: { value: SystemRole; label: string }[] = [
+  { value: "admin", label: "مدير النظام" },
+  { value: "captain", label: "كابتن" },
+  { value: "cashier", label: "كاشير" },
+  { value: "kitchen", label: "مطبخ" },
+  { value: "storekeeper", label: "مسؤول المخزن" },
+  { value: "accountant", label: "محاسب" },
+];
 
 export function CreateStaffAccountDialog({ member, isOpen, onClose, onCreated }: { member: StaffMember | null; isOpen: boolean; onClose: () => void; onCreated: (member: StaffMember) => void }) {
   const [username, setUsername] = useState("");
@@ -52,6 +60,7 @@ export function CreateStaffAccountDialog({ member, isOpen, onClose, onCreated }:
       onCreated(updated);
       resetAndClose();
     } catch (createError) {
+      logSupabaseError("[staff account create]", createError);
       setError(createError instanceof Error ? createError.message : "تعذر إنشاء حساب العامل");
     } finally {
       setPassword("");
@@ -67,7 +76,7 @@ export function CreateStaffAccountDialog({ member, isOpen, onClose, onCreated }:
         <p className="mt-1 text-sm text-[#7c6b60]">سيستخدم العامل هذا الحساب للدخول إلى نظام خاتون.</p>
         <div className="mt-4 grid gap-3">
           <label className="grid gap-1 text-sm font-medium text-[#4a3b34]">اسم المستخدم<input value={username} onChange={(e) => setUsername(e.target.value)} className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 outline-none" /></label>
-          <label className="grid gap-1 text-sm font-medium text-[#4a3b34]">الدور<select value={systemRole} onChange={(e) => setSystemRole(e.target.value as SystemRole)} className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 outline-none">{roles.map((role) => <option key={role} value={role}>{role}</option>)}</select></label>
+          <label className="grid gap-1 text-sm font-medium text-[#4a3b34]">الدور<select value={systemRole} onChange={(e) => setSystemRole(e.target.value as SystemRole)} className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 outline-none">{roles.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}</select></label>
           <label className="grid gap-1 text-sm font-medium text-[#4a3b34]">كلمة المرور<div className="relative"><input value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} className="h-11 w-full rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 pl-10 outline-none" /><button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute left-2 top-1/2 -translate-y-1/2 rounded-md p-2 text-[#7c6b60]">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
           <label className="grid gap-1 text-sm font-medium text-[#4a3b34]">تأكيد كلمة المرور<input value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} type={showPassword ? "text" : "password"} className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 outline-none" /></label>
         </div>

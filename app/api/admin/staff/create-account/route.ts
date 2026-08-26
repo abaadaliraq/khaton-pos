@@ -1,11 +1,12 @@
 ﻿import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseErrorText, logSupabaseError } from "@/lib/supabaseError";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database.types";
 import type { SystemRole } from "@/types/staff";
 
-const allowedRoles: SystemRole[] = ["captain", "cashier", "kitchen", "admin"];
-const staffSelect = "id, employee_number, profile_id, full_name, phone, secondary_phone, job_title, department, employment_type, shift_type, hire_date, birth_date, salary, address, emergency_contact_name, emergency_contact_phone, notes, status, has_system_access, created_at, updated_at, profile:profiles(username, role, status)";
+const allowedRoles: SystemRole[] = ["captain", "cashier", "kitchen", "admin", "storekeeper", "accountant"];
+const staffSelect = "id, employee_number, profile_id, full_name, phone, secondary_phone, job_title, department, employment_type, shift_type, hire_date, birth_date, salary, address, emergency_contact_name, emergency_contact_phone, notes, status, has_system_access, created_at, updated_at, profile:profiles!staff_members_profile_id_fkey(username, role, status)";
 
 type RequestBody = { staffId?: unknown; username?: unknown; password?: unknown; systemRole?: unknown };
 type StaffAccountCandidate = {
@@ -22,6 +23,22 @@ function serverError(message: string, status = 400) {
 
 function isSystemRole(value: unknown): value is SystemRole {
   return typeof value === "string" && allowedRoles.includes(value as SystemRole);
+}
+
+function isMissingDatabaseRoleError(error: unknown, role: SystemRole) {
+  if (role !== "storekeeper" && role !== "accountant") return false;
+  const text = getSupabaseErrorText(error).toLowerCase();
+  return text.includes("invalid user role") ||
+    text.includes("invalid system role") ||
+    text.includes("profiles_role_check") ||
+    text.includes("violates check constraint") ||
+    text.includes("profile role does not match");
+}
+
+function roleMigrationMessage(role: SystemRole) {
+  const label = role === "accountant" ? "محاسب" : "مسؤول المخزن";
+  const migration = role === "accountant" ? "20260825_purchase_request_workflow.sql" : "20260824_storekeeper_role_and_access.sql";
+  return `تعذر إنشاء حساب ${label} لأن الدور غير مضاف في قاعدة البيانات. طبّق migration ${migration} ثم حاول مرة أخرى.`;
 }
 
 function isSameOrigin(request: NextRequest) {
@@ -43,7 +60,7 @@ async function readJsonBody(request: NextRequest) {
   try {
     return { body: (await request.json()) as RequestBody, error: null };
   } catch (parseError) {
-    console.error("Invalid create staff account JSON body", parseError);
+    logSupabaseError("[staff account API parse JSON]", parseError);
     return { body: null, error: serverError("بيانات الطلب غير صحيحة", 400) };
   }
 }
@@ -71,6 +88,7 @@ export async function POST(request: NextRequest) {
   if (!/^[a-z0-9_]{3,32}$/.test(username)) return serverError("اسم المستخدم يجب أن يكون بين 3 و32 حرفًا ويحتوي أحرفًا إنجليزية وأرقامًا وشرطة سفلية فقط");
   if (password.length < 8 || password.length > 128) return serverError("كلمة المرور يجب أن تكون بين 8 و128 حرفًا");
   if (!isSystemRole(body.systemRole)) return serverError("الدور غير صحيح");
+  const systemRole = body.systemRole;
 
   const supabase = await createClient();
   const { data: authData, error: authError } = await supabase.auth.getUser();
@@ -83,6 +101,7 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
   const adminProfile = currentProfile as unknown as { id: string; role: string; status: string } | null;
 
+  if (profileError) logSupabaseError("Failed to load current admin profile before creating staff account", profileError);
   if (profileError || !adminProfile || adminProfile.role !== "admin" || adminProfile.status !== "active") {
     return serverError("هذه العملية متاحة للإدارة فقط", 403);
   }
@@ -94,6 +113,7 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
   const staffRow = staff as unknown as StaffAccountCandidate | null;
 
+  if (staffError) logSupabaseError("Failed to load staff row before creating system account", staffError);
   if (staffError || !staffRow) return serverError("العامل غير موجود", 404);
   if (staffRow.status !== "active") return serverError("لا يمكن إنشاء حساب إلا لعامل نشط");
   if (staffRow.profile_id || staffRow.has_system_access) return serverError("العامل لديه حساب نظام مسبقًا");
@@ -104,7 +124,7 @@ export async function POST(request: NextRequest) {
     .eq("username", username)
     .maybeSingle();
   if (existingProfileError) {
-    console.error("Failed to check existing profile before creating staff account", existingProfileError);
+    logSupabaseError("Failed to check existing profile before creating staff account", existingProfileError);
     return serverError("تعذر التحقق من اسم المستخدم", 500);
   }
   if (existingProfile) return serverError("اسم المستخدم مستخدم مسبقًا");
@@ -118,11 +138,14 @@ export async function POST(request: NextRequest) {
     email,
     password,
     email_confirm: true,
-    user_metadata: { username, full_name: staffRow.full_name, role: body.systemRole },
+    user_metadata: { username, full_name: staffRow.full_name, role: systemRole },
   });
 
   if (createError || !created.user) {
-    console.error("Failed to create Supabase Auth user for staff account", createError);
+    logSupabaseError("Failed to create Supabase Auth user for staff account", createError);
+    if (isMissingDatabaseRoleError(createError, systemRole)) {
+      return serverError(roleMigrationMessage(systemRole), 500);
+    }
     return serverError("تعذر إنشاء حساب النظام. تحقق من اسم المستخدم وحاول مرة أخرى.", 500);
   }
 
@@ -134,9 +157,9 @@ export async function POST(request: NextRequest) {
         .select("id, username, role")
         .eq("id", created.user.id)
         .maybeSingle();
-      if (waitError) console.error("Failed while waiting for created staff profile", waitError);
+      if (waitError) logSupabaseError("Failed while waiting for created staff profile", waitError);
       const createdProfile = profile as unknown as { id: string; username: string; role: string } | null;
-      if (createdProfile?.id && createdProfile.username === username && createdProfile.role === body.systemRole) {
+      if (createdProfile?.id && createdProfile.username === username && createdProfile.role === systemRole) {
         profileId = createdProfile.id;
         break;
       }
@@ -149,7 +172,7 @@ export async function POST(request: NextRequest) {
       p_staff_id: staffId,
       p_profile_id: profileId,
       p_username: username,
-      p_role: body.systemRole,
+      p_role: systemRole,
     } as never);
     if (linkError || !linkedStaff) throw linkError ?? new Error("Staff profile link RPC returned no row");
 
@@ -163,8 +186,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ staff: updatedStaff });
   } catch (linkError) {
     const { error: deleteError } = await admin.auth.admin.deleteUser(created.user.id);
-    if (deleteError) console.error("Failed to delete orphaned staff auth user after link failure", deleteError);
-    console.error("Failed to link staff system account", linkError);
+    if (deleteError) logSupabaseError("Failed to delete orphaned staff auth user after link failure", deleteError);
+    logSupabaseError("Failed to link staff system account", linkError);
+    if (isMissingDatabaseRoleError(linkError, systemRole)) {
+      return serverError(roleMigrationMessage(systemRole), 500);
+    }
     return serverError("تم إلغاء إنشاء الحساب لأن ربطه بالعامل فشل", 500);
   }
 }
