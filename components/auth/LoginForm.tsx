@@ -19,6 +19,7 @@ const demoAccounts = [
   ["الإدارة", "admin"],
   ["مسؤول المخزن", "storekeeper"],
   ["محاسب", "accountant"],
+  ["مالك", "owner"],
 ];
 
 const invalidLoginMessage = "اسم المستخدم أو كلمة المرور غير صحيحة";
@@ -208,7 +209,6 @@ export function LoginForm({
             </div>
           ))}
         </div>
-        <p className="mt-2 text-xs text-stone-500">كلمات المرور تُحدد من متغيرات البيئة عند إنشاء المستخدمين.</p>
       </div>
     </form>
   );

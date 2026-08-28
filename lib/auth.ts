@@ -18,6 +18,7 @@ export function getRoleRedirectPath(role: UserRole) {
     admin: "/admin",
     storekeeper: "/inventory",
     accountant: "/finance",
+    owner: "/owner",
   };
 
   return paths[role];
@@ -31,6 +32,7 @@ export function getRoleLabel(role: UserRole) {
     admin: "الإدارة",
     storekeeper: "مسؤول المخزن",
     accountant: "محاسب",
+    owner: "مالك / شريك",
   };
 
   return labels[role];

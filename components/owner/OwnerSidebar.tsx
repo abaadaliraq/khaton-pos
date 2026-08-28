@@ -1,20 +1,20 @@
-﻿"use client";
+"use client";
 
 import clsx from "clsx";
-import { ClipboardList, Home, ReceiptText, Settings, Table2, UsersRound, Utensils } from "lucide-react";
+import { BarChart3, Boxes, Home, Landmark, ShoppingCart, Truck } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { href: "/admin", label: "الرئيسية", icon: Home },
-  { href: "/admin/menu", label: "المنيو", icon: Utensils },
-  { href: "/admin/staff", label: "العمال", icon: UsersRound },
-  { href: "/admin/tables", label: "الطاولات", icon: Table2 },
-  { href: "/admin/audit", label: "سجل العمليات", icon: ClipboardList },
-  { href: "/admin/settings", label: "الإعدادات", icon: Settings },
+  { href: "/owner", label: "الرئيسية", icon: Home },
+  { href: "/owner/finance", label: "الحسابات", icon: Landmark },
+  { href: "/owner/purchases", label: "المشتريات", icon: ShoppingCart },
+  { href: "/owner/suppliers", label: "الموردون", icon: Truck },
+  { href: "/owner/inventory", label: "المخزون", icon: Boxes },
+  { href: "/owner/reports", label: "التقارير", icon: BarChart3 },
 ];
 
-export function AdminSidebar() {
+export function OwnerSidebar() {
   const pathname = usePathname();
 
   return (
@@ -24,14 +24,14 @@ export function AdminSidebar() {
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#5d4032] text-lg font-bold text-white">خ</div>
           <div>
             <p className="text-sm font-bold text-[#2f211c]">خاتون POS</p>
-            <p className="text-xs text-[#7c6b60]">لوحة الإدارة</p>
+            <p className="text-xs text-[#7c6b60]">لوحة الشركاء</p>
           </div>
         </div>
 
         <nav className="mt-5 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+            const active = pathname === item.href || (item.href !== "/owner" && pathname.startsWith(item.href));
             return (
               <Link
                 key={item.href}
@@ -48,9 +48,8 @@ export function AdminSidebar() {
           })}
         </nav>
 
-        <div className="mt-auto rounded-md border border-[#e4d8c8] bg-white p-3 text-xs text-[#7c6b60]">
-          <ReceiptText className="mb-2 text-[#a65f3f]" size={18} />
-          إدارة العمال والموظفين مرتبطة بقاعدة Supabase مباشرة.
+        <div className="mt-auto rounded-md border border-[#e4d8c8] bg-white p-3 text-xs leading-6 text-[#7c6b60]">
+          مساحة رقابية للمالكين والشركاء بدون صلاحيات تشغيلية.
         </div>
       </div>
     </aside>
