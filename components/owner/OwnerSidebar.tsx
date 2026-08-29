@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BarChart3, Boxes, Home, Landmark, ShoppingCart, Truck } from "lucide-react";
+import { BarChart3, Boxes, Home, Landmark, ShoppingCart, Truck, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -10,6 +10,7 @@ const navItems = [
   { href: "/owner/finance", label: "الحسابات", icon: Landmark },
   { href: "/owner/purchases", label: "المشتريات", icon: ShoppingCart },
   { href: "/owner/suppliers", label: "الموردون", icon: Truck },
+  { href: "/owner/staff", label: "العمال", icon: UsersRound },
   { href: "/owner/inventory", label: "المخزون", icon: Boxes },
   { href: "/owner/reports", label: "التقارير", icon: BarChart3 },
 ];
@@ -24,7 +25,6 @@ export function OwnerSidebar() {
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#5d4032] text-lg font-bold text-white">خ</div>
           <div>
             <p className="text-sm font-bold text-[#2f211c]">خاتون POS</p>
-            <p className="text-xs text-[#7c6b60]">لوحة الشركاء</p>
           </div>
         </div>
 
@@ -49,7 +49,6 @@ export function OwnerSidebar() {
         </nav>
 
         <div className="mt-auto rounded-md border border-[#e4d8c8] bg-white p-3 text-xs leading-6 text-[#7c6b60]">
-          مساحة رقابية للمالكين والشركاء بدون صلاحيات تشغيلية.
         </div>
       </div>
     </aside>
