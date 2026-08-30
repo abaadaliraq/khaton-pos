@@ -160,17 +160,22 @@ function EmptyPanel({ message }: { message: string }) {
   return <div className="rounded-md border border-dashed border-[#e4d8c8] bg-[#fbfaf7] p-6 text-center text-sm text-[#7c6b60]">{message}</div>;
 }
 
-export function RevenueBars({ data, compact = false }: { data: DailyRevenuePoint[]; compact?: boolean }) {
+export function RevenueBars({ data, compact = false, variant = "light" }: { data: DailyRevenuePoint[]; compact?: boolean; variant?: "light" | "dark" }) {
   const maxRevenue = Math.max(...data.map((point) => point.revenue), 0);
   const labelStep = compact ? Math.max(1, Math.ceil(data.length / 8)) : 1;
+  const isDark = variant === "dark";
 
   if (data.length === 0) {
-    return <EmptyPanel message="لا توجد بيانات للرسم خلال هذه الفترة" />;
+    return isDark ? (
+      <div className="rounded-md border border-dashed border-white/10 bg-white/[0.04] p-6 text-center text-sm text-zinc-400">لا توجد بيانات للرسم خلال هذه الفترة</div>
+    ) : (
+      <EmptyPanel message="لا توجد بيانات للرسم خلال هذه الفترة" />
+    );
   }
 
   return (
     <div className="overflow-x-auto pb-1">
-      <div className="flex min-w-[520px] items-end gap-2 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] p-4">
+      <div className={`flex min-w-[520px] items-end gap-2 rounded-md border p-4 ${isDark ? "border-white/10 bg-[#292929]" : "border-[#e4d8c8] bg-[#fbfaf7]"}`}>
         {data.map((point, index) => {
           const height = maxRevenue > 0 ? Math.max(8, Math.round((point.revenue / maxRevenue) * 160)) : 8;
           const showLabel = index % labelStep === 0 || index === data.length - 1;
@@ -178,9 +183,9 @@ export function RevenueBars({ data, compact = false }: { data: DailyRevenuePoint
           return (
             <div key={point.date} className="flex min-w-10 flex-1 flex-col items-center gap-2" title={formatDateLabel(point.date, true) + " - " + formatCurrency(point.revenue)}>
               <div className="flex h-44 w-full items-end justify-center">
-                <div className="w-full max-w-8 rounded-t-md bg-[#a65f3f] transition" style={{ height }} />
+                <div className={`w-full max-w-8 rounded-t-md transition ${isDark ? "bg-[#ff5656] shadow-[0_0_18px_rgba(255,86,86,0.18)]" : "bg-[#a65f3f]"}`} style={{ height }} />
               </div>
-              <span className="h-8 text-center text-[11px] leading-4 text-[#7c6b60]">{showLabel ? formatDateLabel(point.date, !compact) : ""}</span>
+              <span className={`h-8 text-center text-[11px] leading-4 ${isDark ? "text-zinc-400" : "text-[#7c6b60]"}`}>{showLabel ? formatDateLabel(point.date, !compact) : ""}</span>
             </div>
           );
         })}

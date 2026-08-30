@@ -74,9 +74,9 @@ function formatTrendLabel(current: number, previous: number) {
 }
 
 function trendTone(direction: TrendDirection, higherIsGood = true) {
-  if (direction === "flat") return "border-[#e4d8c8] bg-[#fbfaf7] text-[#7c6b60]";
-  const good = higherIsGood ? direction === "up" : direction === "down";
-  return good ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700";
+  if (direction === "flat") return "border-white/10 bg-white/[0.04] text-zinc-300";
+  const preferredDirection = higherIsGood ? "up" : "down";
+  return direction === preferredDirection ? "border-[#ff5656]/25 bg-[#ff5656]/10 text-[#ff5656]" : "border-[#ff5656]/25 bg-[#ff5656]/10 text-[#ffb0b0]";
 }
 
 function TrendBadge({ current, previous, higherIsGood = true }: { current: number; previous: number; higherIsGood?: boolean }) {
@@ -108,14 +108,14 @@ function KpiCard({
   higherIsGood?: boolean;
 }) {
   return (
-    <article className="rounded-md border border-[#e4d8c8] bg-white p-4 shadow-sm">
+    <article className="rounded-md border border-white/[0.08] bg-[#343434] p-4 shadow-[0_18px_34px_rgba(0,0,0,0.14)]">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm text-[#7c6b60]">{title}</span>
-        <Icon size={19} className="text-[#a65f3f]" />
+        <span className="text-sm text-zinc-300">{title}</span>
+        <Icon size={19} className="text-[#ff5656]" />
       </div>
-      <p className="mt-3 text-2xl font-semibold text-[#2f211c]">{value}</p>
+      <p className="mt-3 text-3xl font-semibold text-white">{value}</p>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-        <span className="text-[#7c6b60]">{helper}</span>
+        <span className="text-zinc-400">{helper}</span>
         {typeof current === "number" && typeof previous === "number" ? <TrendBadge current={current} previous={previous} higherIsGood={higherIsGood} /> : null}
       </div>
     </article>
@@ -123,7 +123,7 @@ function KpiCard({
 }
 
 function EmptyPanel({ message }: { message: string }) {
-  return <div className="rounded-md border border-dashed border-[#e4d8c8] bg-[#fbfaf7] p-5 text-center text-sm text-[#7c6b60]">{message}</div>;
+  return <div className="rounded-md border border-dashed border-white/10 bg-white/[0.04] p-5 text-center text-sm text-zinc-400">{message}</div>;
 }
 
 function LoadingState() {
@@ -131,41 +131,41 @@ function LoadingState() {
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 6 }).map((_, index) => (
-          <div key={index} className="h-32 animate-pulse rounded-md border border-[#e4d8c8] bg-white p-4 shadow-sm">
-            <div className="h-4 w-28 rounded bg-[#efe7dc]" />
-            <div className="mt-5 h-8 w-36 rounded bg-[#efe7dc]" />
-            <div className="mt-5 h-4 w-full rounded bg-[#f5eee6]" />
+          <div key={index} className="h-32 animate-pulse rounded-md border border-white/[0.08] bg-[#343434] p-4 shadow-[0_18px_34px_rgba(0,0,0,0.14)]">
+            <div className="h-4 w-28 rounded bg-white/10" />
+            <div className="mt-5 h-8 w-36 rounded bg-white/10" />
+            <div className="mt-5 h-4 w-full rounded bg-white/[0.07]" />
           </div>
         ))}
       </div>
-      <div className="h-80 animate-pulse rounded-md border border-[#e4d8c8] bg-white" />
+      <div className="h-80 animate-pulse rounded-md border border-white/[0.08] bg-[#343434]" />
     </div>
   );
 }
 
 function TopItemsTable({ items }: { items: MenuItemSalesReport[] }) {
   return (
-    <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
-      <div className="border-b border-[#eee4d8] p-4">
-        <h2 className="font-semibold text-[#2f211c]">الأصناف الأكثر مبيعاً هذا الشهر</h2>
+    <section className="overflow-hidden rounded-md border border-white/[0.08] bg-[#343434] shadow-[0_18px_34px_rgba(0,0,0,0.14)]">
+      <div className="border-b border-white/10 p-4">
+        <h2 className="font-semibold text-white">الأصناف الأكثر مبيعاً هذا الشهر</h2>
       </div>
       {items.length === 0 ? <div className="p-4"><EmptyPanel message="لا توجد مبيعات أصناف هذا الشهر." /></div> : null}
       {items.length > 0 ? (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-right text-sm">
-            <thead className="bg-[#f5eee6] text-[#4a3b34]">
+            <thead className="bg-white/[0.04] text-zinc-300">
               <tr>
                 <th className="px-3 py-3 font-semibold">الصنف</th>
                 <th className="px-3 py-3 font-semibold">الكمية المباعة</th>
                 <th className="px-3 py-3 font-semibold">قيمة المبيعات</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#eee4d8]">
+            <tbody className="divide-y divide-white/10">
               {items.map((item) => (
-                <tr key={item.name} className="hover:bg-[#fffaf4]">
-                  <td className="px-3 py-3 font-medium text-[#2f211c]">{item.name}</td>
-                  <td className="px-3 py-3 text-[#4a3b34]">{formatNumber(item.quantity)}</td>
-                  <td className="px-3 py-3 font-semibold text-[#2f211c]">{formatCurrency(item.sales)}</td>
+                <tr key={item.name} className="hover:bg-white/[0.04]">
+                  <td className="px-3 py-3 font-medium text-white">{item.name}</td>
+                  <td className="px-3 py-3 text-zinc-300">{formatNumber(item.quantity)}</td>
+                  <td className="px-3 py-3 font-semibold text-white">{formatCurrency(item.sales)}</td>
                 </tr>
               ))}
             </tbody>
@@ -180,14 +180,14 @@ function AttentionPanel({ alerts }: { alerts: string[] }) {
   if (alerts.length === 0) return null;
 
   return (
-    <section className="rounded-md border border-amber-200 bg-amber-50 p-4 shadow-sm">
-      <div className="mb-3 flex items-center gap-2 text-amber-800">
+    <section className="rounded-md border border-[#ff5656]/25 bg-[#ff5656]/10 p-4 shadow-[0_18px_34px_rgba(0,0,0,0.14)]">
+      <div className="mb-3 flex items-center gap-2 text-[#ff5656]">
         <AlertTriangle size={18} />
         <h2 className="font-semibold">يحتاج انتباهك</h2>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {alerts.map((alert) => (
-          <div key={alert} className="rounded-md border border-amber-200 bg-white px-3 py-2 text-sm font-medium text-[#4a3b34]">{alert}</div>
+          <div key={alert} className="rounded-md border border-white/10 bg-[#343434] px-3 py-2 text-sm font-medium text-white">{alert}</div>
         ))}
       </div>
     </section>
@@ -301,14 +301,14 @@ export default function OwnerPage() {
   }, [lowStockCount, outOfStockCount, pendingRequestCount, unpaidPurchaseCount]);
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-md border border-[#e4d8c8] bg-white p-5 shadow-sm">
-        <p className="text-sm text-[#a65f3f]">Executive Overview</p>
-        <h1 className="mt-1 text-2xl font-semibold text-[#2f211c]">الرئيسية</h1>
-        <p className="mt-2 text-sm leading-6 text-[#7c6b60]">نظرة تنفيذية مختصرة على المبيعات، المصروفات، الموردين، المخزون، وطلبات الشراء.</p>
+    <div className="owner-home-dark -mx-4 -my-5 min-h-[calc(100vh-4rem)] space-y-5 bg-[#292929] px-4 py-5 lg:-mx-6 lg:px-6">
+      <section className="rounded-md border border-white/[0.08] bg-[#343434] p-5 shadow-[0_18px_34px_rgba(0,0,0,0.14)]">
+        <p className="text-sm font-semibold text-[#ff5656]">Executive Overview</p>
+        <h1 className="mt-1 text-3xl font-semibold text-white">الرئيسية</h1>
+        <p className="mt-2 text-sm leading-6 text-zinc-400">نظرة تنفيذية مختصرة على المبيعات، المصروفات، الموردين، المخزون، وطلبات الشراء.</p>
       </section>
 
-      {errorMessage ? <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">{errorMessage}</div> : null}
+      {errorMessage ? <div className="rounded-md border border-[#ff5656]/25 bg-[#ff5656]/10 p-4 text-sm text-[#ffb0b0]">{errorMessage}</div> : null}
 
       {isLoading ? (
         <LoadingState />
@@ -323,12 +323,12 @@ export default function OwnerPage() {
             <KpiCard title="طلبات تحتاج متابعة" value={formatNumber(pendingRequestCount)} helper="طلبات شراء Pending" icon={ClipboardList} />
           </section>
 
-          <section className="rounded-md border border-[#e4d8c8] bg-white p-4 shadow-sm">
+          <section className="rounded-md border border-white/[0.08] bg-[#343434] p-4 shadow-[0_18px_34px_rgba(0,0,0,0.14)]">
             <div className="mb-4">
-              <h2 className="text-lg font-semibold text-[#2f211c]">حركة المبيعات - آخر 7 أيام</h2>
-              <p className="mt-1 text-sm text-[#7c6b60]">حسب المدفوعات المكتملة بتوقيت بغداد.</p>
+              <h2 className="text-lg font-semibold text-white">حركة المبيعات - آخر 7 أيام</h2>
+              <p className="mt-1 text-sm text-zinc-400">حسب المدفوعات المكتملة بتوقيت بغداد.</p>
             </div>
-            <RevenueBars data={lastSevenDays} />
+            <RevenueBars data={lastSevenDays} variant="dark" />
           </section>
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">

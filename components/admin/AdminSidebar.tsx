@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import { ClipboardList, Home, ReceiptText, Settings, Table2, UsersRound, Utensils } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -18,13 +19,13 @@ export function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden w-72 shrink-0 border-l border-[#e4d8c8] bg-[#fbfaf7] lg:block">
+    <aside className="hidden w-72 shrink-0 border-l border-white/5 bg-[#202020] lg:block">
       <div className="sticky top-0 flex h-screen flex-col p-4">
-        <div className="flex items-center gap-3 border-b border-[#e4d8c8] pb-4">
-          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#5d4032] text-lg font-bold text-white">خ</div>
+        <div className="flex items-center gap-3 border-b border-white/10 pb-4">
+          <Image src="/brand/khaton-logo.png" alt="شعار مطعم وكافيه خاتون" width={52} height={52} className="h-[52px] w-[52px] shrink-0 object-contain" priority />
           <div>
-            <p className="text-sm font-bold text-[#2f211c]">خاتون POS</p>
-            <p className="text-xs text-[#7c6b60]">لوحة الإدارة</p>
+            <p className="text-sm font-bold text-white">مطعم وكافيه خاتون</p>
+            <p className="text-xs text-zinc-400">لوحة الإدارة</p>
           </div>
         </div>
 
@@ -37,19 +38,19 @@ export function AdminSidebar() {
                 key={item.href}
                 href={item.href}
                 className={clsx(
-                  "flex h-11 items-center gap-3 rounded-md px-3 text-sm font-medium transition",
-                  active ? "bg-[#5d4032] text-white" : "text-[#4a3b34] hover:bg-[#efe7dc]",
+                  "flex h-11 items-center gap-3 rounded-md border px-3 text-sm font-medium transition",
+                  active ? "border-[#ff5656]/35 bg-[#ff5656] text-white shadow-[0_14px_28px_rgba(255,86,86,0.18)]" : "border-transparent text-zinc-300 hover:border-white/10 hover:bg-white/[0.06] hover:text-white",
                 )}
               >
-                <Icon size={18} />
+                <Icon size={18} className={active ? "text-white" : "text-[#ff5656]"} />
                 {item.label}
               </Link>
             );
           })}
         </nav>
 
-        <div className="mt-auto rounded-md border border-[#e4d8c8] bg-white p-3 text-xs text-[#7c6b60]">
-          <ReceiptText className="mb-2 text-[#a65f3f]" size={18} />
+        <div className="mt-auto rounded-md border border-white/10 bg-white/[0.04] p-3 text-xs text-zinc-400 shadow-[0_14px_30px_rgba(0,0,0,0.16)]">
+          <ReceiptText className="mb-2 text-[#ff5656]" size={18} />
           إدارة العمال والموظفين مرتبطة بقاعدة Supabase مباشرة.
         </div>
       </div>

@@ -32,6 +32,129 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.management-shell {
+  --management-bg: #292929;
+  --management-sidebar: #202020;
+  --management-card: #343434;
+  --management-card-soft: #303030;
+  --management-border: rgba(255, 255, 255, 0.08);
+  --management-border-strong: rgba(255, 255, 255, 0.14);
+  --management-text: #ffffff;
+  --management-muted: #d4d4d8;
+  --management-soft: #a1a1aa;
+  --management-accent: #ff5656;
+  min-height: 100vh;
+  background: var(--management-bg);
+  color: var(--management-text);
+}
+
+.management-content {
+  width: 100%;
+  background: var(--management-bg);
+}
+
+.management-shell :where(header) {
+  border-color: var(--management-border);
+  background: rgba(32, 32, 32, 0.96);
+  color: var(--management-text);
+}
+
+.management-shell :where(aside) {
+  border-color: var(--management-border);
+}
+
+.management-shell :where(section.rounded-md, article.rounded-md, div.rounded-md) {
+  border-color: var(--management-border);
+}
+
+.management-content :where(section.rounded-md, article.rounded-md),
+.management-shell :where(.admin-dark-panel) {
+  background: var(--management-card);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.14);
+}
+
+.management-shell :where(.bg-white, .bg-\[\#fffdfa\], .bg-\[\#fbfaf7\], .bg-\[\#fbf7f1\], .bg-\[\#f8f3ed\]) {
+  background: var(--management-card) !important;
+}
+
+.management-shell :where(.bg-\[\#f5eee6\], .bg-\[\#efe7dc\], .bg-\[\#eee4d8\], .bg-\[\#fffaf4\]) {
+  background: var(--management-card-soft) !important;
+}
+
+.management-shell :where(.bg-emerald-50, .bg-amber-50, .bg-rose-50) {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.management-shell :where(.border-emerald-100, .border-emerald-200, .border-amber-100, .border-amber-200, .border-rose-100, .border-rose-200) {
+  border-color: var(--management-border-strong) !important;
+}
+
+.management-shell :where(.border-\[\#e4d8c8\], .border-\[\#eee4d8\], .border-\[\#dfcfbc\], .border-\[\#e8ddcf\], .border-\[\#dccbb8\], .border-\[\#d9c8b5\]) {
+  border-color: var(--management-border) !important;
+}
+
+.management-shell :where(.divide-\[\#eee4d8\] > :not(:last-child), .divide-\[\#e4d8c8\] > :not(:last-child)) {
+  border-color: var(--management-border) !important;
+}
+
+.management-shell :where(.text-\[\#2f211c\], .text-\[\#4a3b34\], .text-stone-950) {
+  color: var(--management-text) !important;
+}
+
+.management-shell :where(.text-\[\#7c6b60\], .text-\[\#8a6a56\], .text-\[\#9a8779\], .text-zinc-400) {
+  color: var(--management-muted) !important;
+}
+
+.management-shell :where(.text-\[\#a65f3f\], .text-\[\#5d4032\]) {
+  color: var(--management-accent) !important;
+}
+
+.management-shell :where(table thead, thead.bg-\[\#f5eee6\]) {
+  background: rgba(255, 255, 255, 0.04);
+  color: #d4d4d8;
+}
+
+.management-shell :where(tbody tr) {
+  transition: background-color 160ms ease;
+}
+
+.management-shell :where(tbody tr:hover) {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.management-shell :where(input, select, textarea) {
+  border-color: var(--management-border) !important;
+  background: #2f2f2f !important;
+  color: var(--management-text) !important;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+
+.management-shell :where(input::placeholder, textarea::placeholder) {
+  color: var(--management-soft);
+}
+
+.management-shell :where(input:focus, select:focus, textarea:focus) {
+  border-color: var(--management-accent) !important;
+  box-shadow: 0 0 0 3px rgba(255, 86, 86, 0.16);
+}
+
+.management-shell :where(button, a) {
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+
+.management-shell :where(button.bg-\[\#5d4032\], a.bg-\[\#5d4032\], button.bg-\[\#a65f3f\], a.bg-\[\#a65f3f\]) {
+  background: var(--management-accent) !important;
+  color: #ffffff !important;
+}
+
+.management-shell :where(button.hover\:bg-\[\#463025\]:hover, a.hover\:bg-\[\#463025\]:hover, button.hover\:bg-\[\#8f4e34\]:hover, a.hover\:bg-\[\#8f4e34\]:hover) {
+  background: #ff7070 !important;
+}
+
+.management-shell :where(.shadow-sm, .shadow-xl) {
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.14) !important;
+}
+
 @media print {
   body {
     background: #ffffff;
@@ -112,5 +235,37 @@ button:disabled {
   body:has(.finance-payment-voucher) .finance-payment-voucher-actions,
   body:has(.finance-expense-voucher) .finance-expense-voucher-actions {
     display: none !important;
+  }
+
+  body:has(.finance-expense-voucher) {
+    background: #ffffff !important;
+  }
+
+  body:has(.finance-expense-voucher) .finance-expense-voucher {
+    color: #1f1712 !important;
+    direction: rtl;
+    font-family: Tahoma, Arial, Helvetica, sans-serif;
+    line-height: 1.55;
+  }
+
+  body:has(.finance-expense-voucher) .finance-expense-voucher > div:not(.finance-expense-voucher-actions) {
+    min-height: calc(210mm - 24mm);
+    border: 1px solid #d9c8b5 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    padding: 8mm !important;
+  }
+
+  body:has(.finance-expense-voucher) .finance-expense-voucher :where(div, section, article, p) {
+    box-shadow: none !important;
+  }
+
+  body:has(.finance-expense-voucher) .finance-expense-voucher [class*="bg-"] {
+    background: #ffffff !important;
+  }
+
+  body:has(.finance-expense-voucher) .finance-expense-voucher img {
+    max-height: 22mm !important;
+    object-fit: contain !important;
   }
 }
