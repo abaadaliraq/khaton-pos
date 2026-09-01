@@ -1,32 +1,49 @@
-import { Clock, LogOut, UserRound } from "lucide-react";
+import { Clock, LogOut, Moon, Sun, UserRound, Volume2, VolumeX } from "lucide-react";
+import { OperationalBrand } from "@/components/operational/OperationalBrand";
 
 type CaptainHeaderProps = {
   currentTime: string;
+  theme: "light" | "dark";
+  soundEnabled: boolean;
+  soundNeedsActivation: boolean;
+  onToggleSound: () => void;
+  onToggleTheme: () => void;
   onLogout: () => void;
 };
 
-export function CaptainHeader({ currentTime, onLogout }: CaptainHeaderProps) {
+export function CaptainHeader({ currentTime, theme, soundEnabled, soundNeedsActivation, onToggleSound, onToggleTheme, onLogout }: CaptainHeaderProps) {
+  const ThemeIcon = theme === "dark" ? Sun : Moon;
+
   return (
-    <header className="sticky top-0 z-30 border-b border-stone-200 bg-[#fbfaf6]/95 backdrop-blur">
+    <header className="captain-header sticky top-0 z-30 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#4c5a35] text-sm font-bold text-white">
-              خ
-            </div>
-            <div>
-              <p className="text-sm font-bold tracking-wide text-stone-950">KHATOUN / خاتون</p>
-              <p className="text-xs text-stone-500">نظام الطلبات</p>
-            </div>
-          </div>
+          <OperationalBrand title="واجهة الكابتن" subtitle="نظام الطلبات" variant={theme} />
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 text-stone-700">
-          <div className="hidden items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm shadow-sm sm:flex">
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={onToggleSound}
+            className="captain-control flex h-10 items-center justify-center gap-2 px-3 text-sm"
+          >
+            {soundEnabled ? <Volume2 size={16} className="text-[#ff5656]" /> : <VolumeX size={16} />}
+            <span className="hidden md:inline">{soundNeedsActivation ? "اضغط لتفعيل الصوت" : soundEnabled ? "الصوت مفعل" : "الصوت مكتوم"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            className="captain-control flex h-10 w-10 items-center justify-center"
+            aria-label={theme === "dark" ? "تفعيل المود النهاري" : "تفعيل المود الليلي"}
+            title={theme === "dark" ? "المود النهاري" : "المود الليلي"}
+          >
+            <ThemeIcon size={16} />
+          </button>
+          <div className="captain-control hidden items-center gap-2 px-3 py-2 text-sm sm:flex">
             <Clock size={16} />
             <span className="tabular-nums">{currentTime || "..."}</span>
           </div>
-          <div className="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm shadow-sm">
+          <div className="captain-control flex items-center gap-2 px-3 py-2 text-sm">
             <UserRound size={16} />
             <span className="hidden sm:inline">الكابتن أحمد</span>
             <span className="sm:hidden">أحمد</span>
@@ -34,7 +51,7 @@ export function CaptainHeader({ currentTime, onLogout }: CaptainHeaderProps) {
           <button
             type="button"
             onClick={onLogout}
-            className="flex h-10 items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 text-sm font-medium text-stone-700 shadow-sm hover:bg-stone-50"
+            className="captain-control flex h-10 items-center gap-2 px-3 text-sm font-medium"
           >
             <LogOut size={16} />
             <span className="hidden sm:inline">خروج</span>

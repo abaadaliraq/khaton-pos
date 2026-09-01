@@ -2,8 +2,10 @@
 
 import { CheckCircle2, Eye, ReceiptText, Save, WalletCards, XCircle } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { DashboardHero } from "@/components/dashboard/DashboardHero";
 import { ExpenseVoucherDialog, expenseVoucherNumber } from "@/components/finance/ExpenseVoucherDialog";
 import { PurchasePaymentVoucherDialog, purchasePaymentVoucherNumber } from "@/components/finance/PurchasePaymentVoucherDialog";
+import { ManagementTabs } from "@/components/ui/ManagementTabs";
 import { formatCurrency } from "@/lib/formatCurrency";
 import { logSupabaseError } from "@/lib/supabaseError";
 import { createExpense, getExpenses } from "@/services/financeService";
@@ -278,28 +280,33 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
   }
 
   return (
-    <div className="space-y-5">
-      <section className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+    <div className={mode === "finance" ? "-mx-4 -my-5 min-h-[calc(100vh-4rem)] space-y-5 bg-[#292929] px-4 pb-5 lg:-mx-6 lg:px-6" : "space-y-5"}>
+      {mode === "finance" ? (
+        <DashboardHero
+          className="-mx-4 lg:-mx-6"
+          image="/images/dashboard/accountant-dashboard-hero.jpg"
+          eyebrow={subtitle}
+          title="الحسابات"
+          description="المبيعات والمصروفات والحركة المالية"
+        />
+      ) : (
+        <section>
           <p className="text-sm text-[#7c6b60]">{subtitle}</p>
           <h1 className="text-2xl font-semibold text-[#2f211c]">{title}</h1>
-        </div>
-        {mode === "finance" && activeTab === "expenses" ? (
+        </section>
+      )}
+
+      {mode === "finance" && activeTab === "expenses" ? (
+        <section className="flex justify-end">
           <button type="button" onClick={() => setIsExpenseOpen(true)} className="flex h-11 items-center gap-2 rounded-md bg-[#a65f3f] px-4 text-sm font-semibold text-white hover:bg-[#8f4e34]">
             <ReceiptText size={18} />
             إضافة مصروف
           </button>
-        ) : null}
-      </section>
+        </section>
+      ) : null}
 
       {mode === "finance" ? (
-        <nav className="flex flex-wrap gap-2 rounded-md border border-[#e4d8c8] bg-white p-2 shadow-sm">
-          {tabs.map((tab) => (
-            <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`h-10 rounded-md px-4 text-sm font-semibold ${activeTab === tab.id ? "bg-[#5d4032] text-white" : "text-[#4a3b34] hover:bg-[#f5eee6]"}`}>
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+        <ManagementTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} ariaLabel="أقسام الحسابات" />
       ) : null}
 
       {message ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p> : null}

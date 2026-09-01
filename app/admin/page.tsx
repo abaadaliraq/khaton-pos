@@ -2,6 +2,7 @@
 
 import { AlertTriangle, Activity, Table2, UserCheck, UserCog, Utensils } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { DashboardHero } from "@/components/dashboard/DashboardHero";
 import { getAdminMenu } from "@/services/adminMenuService";
 import { getAdminTables } from "@/services/adminTableService";
 import { getAuditLogs } from "@/services/auditService";
@@ -317,12 +318,14 @@ export default function AdminPage() {
   }, [disabledTableCount, staffWithoutAccountsCount, unavailableItemCount, zeroPriceCount]);
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-md border border-[#e4d8c8] bg-white p-5 shadow-sm">
-        <p className="text-sm text-[#7c6b60]">مدير النظام</p>
-        <h1 className="mt-1 text-2xl font-semibold text-[#2f211c]">System Operations Dashboard</h1>
-        <p className="mt-2 text-sm leading-6 text-[#7c6b60]">نظرة تشغيلية على المستخدمين، المنيو، الطاولات، وسجل عمليات النظام.</p>
-      </section>
+    <div className="-mx-4 -my-5 min-h-[calc(100vh-4rem)] space-y-5 bg-[#292929] px-4 pb-5 lg:-mx-6 lg:px-6">
+      <DashboardHero
+        className="-mx-4 lg:-mx-6"
+        image="/images/dashboard/admin-dashboard-hero.jpg"
+        eyebrow="مدير النظام"
+        title="إدارة النظام"
+        description="إدارة وتشغيل النظام من مكان واحد"
+      />
 
       {errorMessage ? <div className="rounded-md border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{errorMessage}</div> : null}
 

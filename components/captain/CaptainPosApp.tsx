@@ -2,18 +2,22 @@
 
 import { Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CaptainHeader } from "@/components/captain/CaptainHeader";
 import { CategoryTabs } from "@/components/captain/CategoryTabs";
 import { OrderPanel } from "@/components/captain/OrderPanel";
 import { ProductGrid } from "@/components/captain/ProductGrid";
 import { SendOrderDialog } from "@/components/captain/SendOrderDialog";
 import { TableSelector } from "@/components/captain/TableSelector";
+import { OperationalToast } from "@/components/operational/OperationalToast";
+import { useOperationalNotifications } from "@/components/operational/useOperationalNotifications";
 import { signOut } from "@/services/authService";
 import { getMenuCatalog } from "@/services/menuService";
 import { createRestaurantOrder } from "@/services/orderService";
 import { getRestaurantTables } from "@/services/tableService";
 import type { Category, MenuItem, OrderItem, RestaurantTable } from "@/types/pos";
+
+export type CaptainTheme = "light" | "dark";
 
 function getBaghdadTime() {
   return new Intl.DateTimeFormat("ar-IQ", {
@@ -42,6 +46,30 @@ export function CaptainPosApp() {
   const [noteItemId, setNoteItemId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState("");
   const [isSendingOrder, setIsSendingOrder] = useState(false);
+  const [theme, setTheme] = useState<CaptainTheme>("light");
+
+  const reloadTables = useCallback(async () => {
+    const restaurantTables = await getRestaurantTables();
+    setTables(restaurantTables);
+    setSelectedTable((currentTable) => {
+      if (!currentTable) {
+        return restaurantTables[0] ?? null;
+      }
+
+      return restaurantTables.find((table) => table.id === currentTable.id) ?? restaurantTables[0] ?? null;
+    });
+  }, []);
+
+  const notifications = useOperationalNotifications({
+    role: "captain",
+    onRelevantEvent: (event) => {
+      if (event.type === "order-ready") {
+        reloadTables().catch((error) => {
+          console.error("Failed to reload captain tables after ready notification", error);
+        });
+      }
+    },
+  });
 
   useEffect(() => {
     const firstTick = window.setTimeout(() => setCurrentTime(getBaghdadTime()), 0);
@@ -81,6 +109,17 @@ export function CaptainPosApp() {
     return () => {
       isMounted = false;
     };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const savedTheme = window.localStorage.getItem("khatoun-captain-theme");
+      if (savedTheme === "dark" || savedTheme === "light") {
+        setTheme(savedTheme);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, []);
 
   const filteredItems = useMemo(() => {
@@ -160,15 +199,7 @@ export function CaptainPosApp() {
         items: orderItems,
       });
 
-      const restaurantTables = await getRestaurantTables();
-      setTables(restaurantTables);
-      setSelectedTable((currentTable) => {
-        if (!currentTable) {
-          return restaurantTables[0] ?? null;
-        }
-
-        return restaurantTables.find((table) => table.id === currentTable.id) ?? restaurantTables[0] ?? null;
-      });
+      await reloadTables();
       setIsSendDialogOpen(false);
       setIsOrderSheetOpen(false);
       setOrderItems([]);
@@ -188,9 +219,25 @@ export function CaptainPosApp() {
     router.replace("/login");
   }
 
+  function toggleTheme() {
+    setTheme((currentTheme) => {
+      const nextTheme = currentTheme === "dark" ? "light" : "dark";
+      window.localStorage.setItem("khatoun-captain-theme", nextTheme);
+      return nextTheme;
+    });
+  }
+
   return (
-    <div dir="rtl" className="min-h-screen bg-[#f7f4ed] text-stone-950">
-      <CaptainHeader currentTime={currentTime} onLogout={logout} />
+    <div dir="rtl" data-theme={theme} className="captain-shell min-h-screen">
+      <CaptainHeader
+        currentTime={currentTime}
+        theme={theme}
+        soundEnabled={notifications.soundEnabled}
+        soundNeedsActivation={notifications.soundNeedsActivation}
+        onToggleSound={notifications.toggleSound}
+        onToggleTheme={toggleTheme}
+        onLogout={logout}
+      />
 
       <main className="mx-auto grid max-w-7xl gap-4 px-4 pb-24 pt-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:pb-6">
         <div className="min-w-0 space-y-4">
@@ -204,25 +251,25 @@ export function CaptainPosApp() {
           />
 
           {loadError ? (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 shadow-sm">
+            <div className="rounded-lg border border-[#ff5656]/30 bg-[#ff5656]/10 px-4 py-3 text-sm font-medium text-[#ff5656] shadow-sm">
               {loadError}
             </div>
           ) : null}
 
-          <section className="rounded-lg border border-stone-200 bg-white p-3 shadow-sm">
+          <section className="captain-card p-3">
             <div className="relative">
-              <Search className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
+              <Search className="captain-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" size={18} />
               <input
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="ابحث عن صنف..."
-                className="h-12 w-full rounded-lg border border-stone-200 bg-[#fbfaf6] pr-10 pl-12 text-sm outline-none transition placeholder:text-stone-400 focus:border-[#4c5a35] focus:bg-white"
+                className="captain-input h-12 w-full pr-10 pl-12"
               />
               {searchTerm ? (
                 <button
                   type="button"
                   onClick={() => setSearchTerm("")}
-                  className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100"
+                  className="captain-icon-button absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center"
                   aria-label="مسح البحث"
                 >
                   <X size={16} />
@@ -231,7 +278,7 @@ export function CaptainPosApp() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-stone-200 bg-[#fbfaf6] p-3 shadow-sm">
+          <section className="captain-card p-3">
             <CategoryTabs categories={categories} activeCategory={activeCategory} onChange={setActiveCategory} />
           </section>
 
@@ -257,7 +304,7 @@ export function CaptainPosApp() {
       </main>
 
       {successMessage ? (
-        <div className="fixed left-4 right-4 top-20 z-[70] mx-auto max-w-md rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-center font-bold text-emerald-800 shadow-sm">
+        <div className="fixed left-4 right-4 top-20 z-[70] mx-auto max-w-md rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-center font-bold text-emerald-600 shadow-sm">
           {successMessage}
         </div>
       ) : null}
@@ -270,6 +317,7 @@ export function CaptainPosApp() {
         onClose={() => setIsSendDialogOpen(false)}
         onConfirm={confirmSendOrder}
       />
+      <OperationalToast toast={notifications.toast} />
     </div>
   );
 }

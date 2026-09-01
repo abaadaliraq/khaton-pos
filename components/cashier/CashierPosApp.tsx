@@ -12,6 +12,8 @@ import { PaymentDialog } from "@/components/cashier/PaymentDialog";
 import { PrintReceipt } from "@/components/cashier/PrintReceipt";
 import { ShiftSummaryDialog } from "@/components/cashier/ShiftSummaryDialog";
 import { TablesGrid } from "@/components/cashier/TablesGrid";
+import { OperationalToast } from "@/components/operational/OperationalToast";
+import { useOperationalNotifications } from "@/components/operational/useOperationalNotifications";
 import { getBillTotals, getShiftSummary } from "@/lib/cashierCalculations";
 import { createClient } from "@/lib/supabase/client";
 import { getCashierTables } from "@/services/cashierService";
@@ -37,6 +39,7 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
   const [isCloseTableOpen, setIsCloseTableOpen] = useState(false);
   const [printOrder, setPrintOrder] = useState<CashierOrder | null>(null);
   const realtimeReloadTimerRef = useRef<number | null>(null);
+  const notifications = useOperationalNotifications({ role: "cashier" });
 
   function showMessage(nextMessage: string) {
     setMessage(nextMessage);
@@ -276,7 +279,13 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#F7F1E8] text-[#2C211D]">
-      <CashierHeader session={session} onOpenShiftSummary={() => setIsShiftOpen(true)} />
+      <CashierHeader
+        session={session}
+        soundEnabled={notifications.soundEnabled}
+        soundNeedsActivation={notifications.soundNeedsActivation}
+        onToggleSound={notifications.toggleSound}
+        onOpenShiftSummary={() => setIsShiftOpen(true)}
+      />
 
       <main className="cashier-no-print mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_390px]">
         <div className="min-w-0 space-y-4">
@@ -313,6 +322,7 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
           {message}
         </div>
       ) : null}
+      <OperationalToast toast={notifications.toast} />
 
       <DiscountDialog order={selectedOrder} isOpen={isDiscountOpen} onClose={() => setIsDiscountOpen(false)} onApply={applyDiscount} />
       <PaymentDialog order={selectedOrder} isOpen={isPaymentOpen} onClose={() => setIsPaymentOpen(false)} onConfirm={confirmPayment} />

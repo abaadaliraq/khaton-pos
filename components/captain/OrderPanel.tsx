@@ -37,9 +37,9 @@ function PanelContent({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-stone-200 pb-3">
-        <p className="text-xs text-stone-500">سلة الطلب</p>
-        <h2 className="text-xl font-bold text-stone-950">
+      <div className="captain-divider border-b pb-3">
+        <p className="captain-muted text-xs">سلة الطلب</p>
+        <h2 className="captain-heading text-xl font-bold">
           {selectedTable ? `طاولة ${selectedTable.id}` : "لم تختر طاولة"}
         </h2>
       </div>
@@ -61,20 +61,20 @@ function PanelContent({
             ))}
           </div>
         ) : (
-          <div className="flex h-56 flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 bg-[#fbfaf6] text-center text-stone-500">
+          <div className="captain-empty-state flex h-56 flex-col items-center justify-center text-center">
             <ShoppingBag size={30} />
             <p className="mt-3 text-sm font-medium">السلة فارغة</p>
           </div>
         )}
       </div>
 
-      <div className="space-y-3 border-t border-stone-200 pt-3">
+      <div className="captain-divider space-y-3 border-t pt-3">
         <OrderSummary subtotal={subtotal} />
         <button
           type="button"
           disabled={!canSend}
           onClick={onSend}
-          className="h-12 w-full rounded-lg bg-[#4c5a35] text-sm font-bold text-white transition hover:bg-[#394427] disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-500"
+          className="captain-primary-button h-12 w-full text-sm font-bold"
         >
           إرسال الطلب
         </button>
@@ -86,14 +86,14 @@ function PanelContent({
 export function OrderPanel(props: OrderPanelProps) {
   return (
     <>
-      <aside className="hidden h-[calc(100vh-88px)] rounded-lg border border-stone-200 bg-white p-4 shadow-sm lg:sticky lg:top-[76px] lg:block">
+      <aside className="captain-card hidden h-[calc(100vh-88px)] p-4 lg:sticky lg:top-[76px] lg:block">
         <PanelContent {...props} />
       </aside>
 
       <button
         type="button"
         onClick={props.onMobileOpen}
-        className="fixed inset-x-4 bottom-4 z-40 flex h-14 items-center justify-between rounded-lg bg-[#4c5a35] px-4 text-white shadow-lg lg:hidden"
+        className="captain-primary-button fixed inset-x-4 bottom-4 z-40 flex h-14 items-center justify-between px-4 font-bold shadow-lg lg:hidden"
       >
         <span className="flex items-center gap-2 font-bold">
           <ShoppingBag size={20} />
@@ -103,13 +103,13 @@ export function OrderPanel(props: OrderPanelProps) {
       </button>
 
       {props.isMobileOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/30 p-3 lg:hidden">
-          <div className="h-[82vh] w-full rounded-t-lg bg-white p-4 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end bg-black/40 p-3 lg:hidden">
+          <div className="captain-card h-[82vh] w-full rounded-t-lg p-4 shadow-xl">
             <div className="mb-3 flex justify-end">
               <button
                 type="button"
                 onClick={props.onMobileClose}
-                className="rounded-lg border border-stone-200 p-2 text-stone-600 hover:bg-stone-50"
+                className="captain-icon-button p-2"
                 aria-label="إغلاق السلة"
               >
                 <X size={18} />

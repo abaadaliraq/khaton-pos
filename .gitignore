@@ -30,6 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# local Codex/browser temp profiles
+.codex-temp/
+
 # env files (can opt-in for committing if needed)
 .env*
 

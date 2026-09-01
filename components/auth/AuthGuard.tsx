@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
+import { KhatounLoader } from "@/components/ui/KhatounLoader";
 import { getRoleRedirectPath } from "@/lib/auth";
 import { clearLegacyMockStorage, getCurrentSession, getSupabaseSetupError } from "@/services/authService";
 import type { UserRole, UserSession } from "@/types/auth";
@@ -79,13 +80,7 @@ export function AuthGuard({ allowedRole, loginPath = "/login", children }: AuthG
   }, [allowedRole, loginPath, pathname, router, setupError]);
 
   if (isChecking || !session) {
-    return (
-      <div dir="rtl" className="flex min-h-screen items-center justify-center bg-[#f7f4ed] px-4 text-stone-700">
-        <div className="rounded-lg border border-stone-200 bg-white px-5 py-4 text-sm shadow-sm">
-          {error || "جارٍ التحقق من الجلسة..."}
-        </div>
-      </div>
-    );
+    return <KhatounLoader text={error || "جارٍ التحقق من الجلسة..."} />;
   }
 
   return <>{typeof children === "function" ? children(session) : children}</>;

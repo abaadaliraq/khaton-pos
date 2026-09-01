@@ -1,7 +1,8 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowUp, Boxes, ClipboardList, Minus, ReceiptText, ShoppingCart, TrendingUp, WalletCards } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Boxes, ClipboardList, Minus, ReceiptText, ShoppingCart, TrendingUp, WalletCards, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { DashboardHero } from "@/components/dashboard/DashboardHero";
 import { RevenueBars } from "@/components/reports/SalesReportsDashboard";
 import { formatCurrency } from "@/lib/formatCurrency";
 import { getAdminSalesReport } from "@/services/adminReportService";
@@ -9,9 +10,10 @@ import { getInventoryOverview } from "@/services/inventoryService";
 import { getOwnerFinanceData } from "@/services/ownerFinanceService";
 import { getPurchaseRequests } from "@/services/purchaseService";
 import type { DailyRevenuePoint, MenuItemSalesReport, SalesReportSummary } from "@/types/adminReports";
-import type { InventoryItem } from "@/types/inventory";
+import type { InventoryItem, InventoryUnitCode } from "@/types/inventory";
 
 type TrendDirection = "up" | "down" | "flat";
+type StockDialog = "low" | "out" | null;
 
 const baghdadTimeZone = "Asia/Baghdad";
 const emptySummary: SalesReportSummary = { revenue: 0, orderCount: 0, mealCount: 0, averageOrderValue: 0 };
@@ -56,6 +58,20 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(Number.isFinite(value) ? value : 0);
 }
 
+function formatQuantity(quantity: number, unitCode: InventoryUnitCode) {
+  const labels: Record<InventoryUnitCode, string> = {
+    g: "غرام",
+    kg: "كغم",
+    ml: "مل",
+    l: "لتر",
+    piece: "قطعة",
+    pack: "علبة",
+    bottle: "قنينة",
+  };
+
+  return `${new Intl.NumberFormat("ar-IQ", { maximumFractionDigits: 3 }).format(quantity)} ${labels[unitCode]}`;
+}
+
 function comparisonPercent(current: number, previous: number) {
   if (previous === 0) return current > 0 ? null : 0;
   return ((current - previous) / previous) * 100;
@@ -98,6 +114,7 @@ function KpiCard({
   current,
   previous,
   higherIsGood = true,
+  onClick,
 }: {
   title: string;
   value: string;
@@ -106,9 +123,11 @@ function KpiCard({
   current?: number;
   previous?: number;
   higherIsGood?: boolean;
+  onClick?: () => void;
 }) {
-  return (
-    <article className="rounded-md border border-white/[0.08] bg-[#343434] p-4 shadow-[0_18px_34px_rgba(0,0,0,0.14)]">
+  const className = "rounded-md border border-white/[0.08] bg-[#343434] p-4 text-right shadow-[0_18px_34px_rgba(0,0,0,0.14)]";
+  const content = (
+    <>
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm text-zinc-300">{title}</span>
         <Icon size={19} className="text-[#ff5656]" />
@@ -118,6 +137,20 @@ function KpiCard({
         <span className="text-zinc-400">{helper}</span>
         {typeof current === "number" && typeof previous === "number" ? <TrendBadge current={current} previous={previous} higherIsGood={higherIsGood} /> : null}
       </div>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={`${className} transition hover:-translate-y-0.5 hover:border-[#ff5656]/60 hover:bg-[#383838] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5656]/35`}>
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <article className={className}>
+      {content}
     </article>
   );
 }
@@ -194,6 +227,49 @@ function AttentionPanel({ alerts }: { alerts: string[] }) {
   );
 }
 
+function OwnerInventoryItemsDialog({ title, items, onClose }: { title: string; items: InventoryItem[]; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" dir="rtl">
+      <section className="max-h-[84vh] w-full max-w-3xl overflow-hidden rounded-md border border-white/10 bg-[#2f2f2f] shadow-[0_30px_90px_rgba(0,0,0,0.5)]">
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 p-4">
+          <div>
+            <p className="text-xs font-semibold uppercase text-[#ff5656]">Inventory Alert</p>
+            <h2 className="mt-1 text-lg font-semibold text-white">{title}</h2>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-md border border-white/10 p-2 text-zinc-300 hover:bg-white/10 hover:text-white" title="إغلاق">
+            <X size={17} />
+          </button>
+        </div>
+        {items.length === 0 ? <p className="p-6 text-center text-sm text-zinc-400">لا توجد مواد ضمن هذا التصنيف حالياً.</p> : null}
+        {items.length > 0 ? (
+          <div className="max-h-[64vh] overflow-auto">
+            <table className="w-full min-w-[620px] text-right text-sm">
+              <thead className="sticky top-0 bg-[#262626] text-zinc-300">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">المادة</th>
+                  <th className="px-4 py-3 font-semibold">الرصيد الحالي</th>
+                  <th className="px-4 py-3 font-semibold">الحد الأدنى</th>
+                  <th className="px-4 py-3 font-semibold">متوسط التكلفة</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                {items.map((item) => (
+                  <tr key={item.id} className="hover:bg-white/[0.04]">
+                    <td className="px-4 py-3 font-medium text-white">{item.nameAr}</td>
+                    <td className="px-4 py-3 text-zinc-300">{formatQuantity(item.stockOnHand, item.baseUnitCode)}</td>
+                    <td className="px-4 py-3 text-zinc-300">{formatQuantity(item.minimumStock, item.baseUnitCode)}</td>
+                    <td className="px-4 py-3 text-white">{formatCurrency(item.averageCost)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
 function stockStatus(item: InventoryItem) {
   if (item.stockOnHand <= 0) return "out";
   if (item.stockOnHand <= item.minimumStock) return "low";
@@ -220,6 +296,9 @@ export default function OwnerPage() {
   const [inventoryValue, setInventoryValue] = useState(0);
   const [lowStockCount, setLowStockCount] = useState(0);
   const [outOfStockCount, setOutOfStockCount] = useState(0);
+  const [lowStockItems, setLowStockItems] = useState<InventoryItem[]>([]);
+  const [outOfStockItems, setOutOfStockItems] = useState<InventoryItem[]>([]);
+  const [stockDialog, setStockDialog] = useState<StockDialog>(null);
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -249,17 +328,10 @@ export default function OwnerPage() {
           .reduce((total, expense) => total + expense.amount, 0);
         const totalPurchases = financeData.purchases.reduce((total, purchase) => total + purchase.totalAmount, 0);
         const totalPaidToSuppliers = financeData.payments.reduce((total, payment) => total + payment.amount, 0);
-        const stockCounts = inventoryData.items.reduce(
-          (summary, item) => {
-            const status = stockStatus(item);
-            return {
-              value: summary.value + item.stockOnHand * item.averageCost,
-              low: summary.low + (status === "low" ? 1 : 0),
-              out: summary.out + (status === "out" ? 1 : 0),
-            };
-          },
-          { value: 0, low: 0, out: 0 },
-        );
+        const activeInventoryItems = inventoryData.items.filter((item) => item.isActive);
+        const lowInventoryItems = activeInventoryItems.filter((item) => stockStatus(item) === "low");
+        const outInventoryItems = activeInventoryItems.filter((item) => stockStatus(item) === "out");
+        const stockValue = activeInventoryItems.reduce((total, item) => total + item.stockOnHand * item.averageCost, 0);
 
         setTodaySummary(todayReport.summary);
         setYesterdaySummary(yesterdayReport.summary);
@@ -271,9 +343,11 @@ export default function OwnerPage() {
         setPreviousMonthExpenses(expensesPreviousMonth);
         setSupplierDues(Math.max(totalPurchases - totalPaidToSuppliers, 0));
         setUnpaidPurchaseCount(financeData.purchases.filter((purchase) => purchase.paymentStatus === "unpaid").length);
-        setInventoryValue(stockCounts.value);
-        setLowStockCount(stockCounts.low);
-        setOutOfStockCount(stockCounts.out);
+        setInventoryValue(stockValue);
+        setLowStockCount(lowInventoryItems.length);
+        setOutOfStockCount(outInventoryItems.length);
+        setLowStockItems(lowInventoryItems);
+        setOutOfStockItems(outInventoryItems);
         setPendingRequestCount(purchaseRequests.filter((request) => request.status === "pending").length);
         setErrorMessage(financeData.errors.length > 0 ? "تعذر تحميل بعض مؤشرات لوحة المالك." : "");
       } catch (error) {
@@ -301,12 +375,14 @@ export default function OwnerPage() {
   }, [lowStockCount, outOfStockCount, pendingRequestCount, unpaidPurchaseCount]);
 
   return (
-    <div className="owner-home-dark -mx-4 -my-5 min-h-[calc(100vh-4rem)] space-y-5 bg-[#292929] px-4 py-5 lg:-mx-6 lg:px-6">
-      <section className="rounded-md border border-white/[0.08] bg-[#343434] p-5 shadow-[0_18px_34px_rgba(0,0,0,0.14)]">
-        <p className="text-sm font-semibold text-[#ff5656]">Executive Overview</p>
-        <h1 className="mt-1 text-3xl font-semibold text-white">الرئيسية</h1>
-        <p className="mt-2 text-sm leading-6 text-zinc-400">نظرة تنفيذية مختصرة على المبيعات، المصروفات، الموردين، المخزون، وطلبات الشراء.</p>
-      </section>
+    <div className="owner-home-dark -mx-4 -my-5 min-h-[calc(100vh-4rem)] space-y-5 bg-[#292929] px-4 pb-5 lg:-mx-6 lg:px-6">
+      <DashboardHero
+        className="-mx-4 lg:-mx-6"
+        image="/images/dashboard/owner-dashboard-hero.jpg"
+        eyebrow="Executive Overview"
+        title="مالك المطعم"
+        description="نظرة شاملة على أداء مطعم وكافيه خاتون"
+      />
 
       {errorMessage ? <div className="rounded-md border border-[#ff5656]/25 bg-[#ff5656]/10 p-4 text-sm text-[#ffb0b0]">{errorMessage}</div> : null}
 
@@ -314,12 +390,14 @@ export default function OwnerPage() {
         <LoadingState />
       ) : (
         <>
-          <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <KpiCard title="مبيعات اليوم" value={formatCurrency(todaySummary.revenue)} helper="مقارنة بأمس" icon={TrendingUp} current={todaySummary.revenue} previous={yesterdaySummary.revenue} />
             <KpiCard title="مبيعات هذا الشهر" value={formatCurrency(monthSummary.revenue)} helper="مقارنة بالشهر السابق" icon={ReceiptText} current={monthSummary.revenue} previous={previousMonthSummary.revenue} />
             <KpiCard title="مصروفات هذا الشهر" value={formatCurrency(monthExpenses)} helper="مقارنة بالشهر السابق" icon={WalletCards} current={monthExpenses} previous={previousMonthExpenses} higherIsGood={false} />
             <KpiCard title="مستحقات الموردين" value={formatCurrency(supplierDues)} helper={`${formatNumber(unpaidPurchaseCount)} فواتير غير مدفوعة`} icon={ShoppingCart} />
-            <KpiCard title="قيمة المخزون الحالية" value={formatCurrency(inventoryValue)} helper={`${formatNumber(lowStockCount)} منخفضة / ${formatNumber(outOfStockCount)} نافدة`} icon={Boxes} />
+            <KpiCard title="قيمة المخزون الحالية" value={formatCurrency(inventoryValue)} helper="حسب متوسط التكلفة الحالي" icon={Boxes} />
+            <KpiCard title="مواد منخفضة" value={formatNumber(lowStockCount)} helper="اضغط لعرض المواد المنخفضة" icon={AlertTriangle} onClick={() => setStockDialog("low")} />
+            <KpiCard title="مواد نافدة" value={formatNumber(outOfStockCount)} helper="اضغط لعرض المواد النافدة" icon={Boxes} onClick={() => setStockDialog("out")} />
             <KpiCard title="طلبات تحتاج متابعة" value={formatNumber(pendingRequestCount)} helper="طلبات شراء Pending" icon={ClipboardList} />
           </section>
 
@@ -337,6 +415,13 @@ export default function OwnerPage() {
           </div>
         </>
       )}
+      {stockDialog ? (
+        <OwnerInventoryItemsDialog
+          title={stockDialog === "low" ? "المواد المنخفضة" : "المواد النافدة"}
+          items={stockDialog === "low" ? lowStockItems : outOfStockItems}
+          onClose={() => setStockDialog(null)}
+        />
+      ) : null}
     </div>
   );
 }

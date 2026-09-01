@@ -3,6 +3,8 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Boxes, ClipboardList, CookingPot, Edit3, PackagePlus, Plus, RefreshCw, Save, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { DashboardHero } from "@/components/dashboard/DashboardHero";
+import { ManagementTabs } from "@/components/ui/ManagementTabs";
 import {
   adjustInventoryStock,
   createInventoryItem,
@@ -19,6 +21,7 @@ import { formatCurrency } from "@/lib/formatCurrency";
 import type { ActiveRecipe, InventoryItem, InventoryMovement, InventoryMovementType, InventoryUnit, RecipeItem, RecipeSummary } from "@/types/inventory";
 
 type ActiveTab = "overview" | "items" | "purchaseRequests" | "receiving" | "movements" | "recipes";
+type StockFilter = "all" | "low" | "out";
 
 const movementLabels: Record<InventoryMovementType, string> = {
   opening_balance: "رصيد افتتاحي",
@@ -127,12 +130,27 @@ function parseNonNegativeNumber(value: string) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
-function InventoryStat({ title, value, helper }: { title: string; value: string; helper: string }) {
-  return (
-    <section className="rounded-md border border-[#e4d8c8] bg-white p-4 shadow-sm">
+function InventoryStat({ title, value, helper, onClick }: { title: string; value: string; helper: string; onClick?: () => void }) {
+  const className = "rounded-md border border-[#e4d8c8] bg-white p-4 text-right shadow-sm";
+  const content = (
+    <>
       <p className="text-sm text-[#7c6b60]">{title}</p>
       <p className="mt-2 text-2xl font-semibold text-[#2f211c]">{value}</p>
       <p className="mt-1 text-xs text-[#9a8779]">{helper}</p>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={`${className} transition hover:-translate-y-0.5 hover:border-[#ff5656]/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5656]/35`}>
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <section className={className}>
+      {content}
     </section>
   );
 }
@@ -156,6 +174,7 @@ export function AdminInventoryDashboard() {
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [adjustingItem, setAdjustingItem] = useState<InventoryItem | null>(null);
   const [adjustmentForm, setAdjustmentForm] = useState(emptyAdjustmentForm);
+  const [itemStockFilter, setItemStockFilter] = useState<StockFilter>("all");
   const [movementItemFilter, setMovementItemFilter] = useState("all");
   const [movementTypeFilter, setMovementTypeFilter] = useState<InventoryMovementType | "all">("all");
   const [recipeItemForm, setRecipeItemForm] = useState(emptyRecipeItemForm);
@@ -169,8 +188,14 @@ export function AdminInventoryDashboard() {
   const selectedQuickBaseUnit = units.find((unit) => unit.id === quickItemForm.baseUnitId);
   const quickOpeningUnits = selectedQuickBaseUnit ? units.filter((unit) => unit.family === selectedQuickBaseUnit.family) : [];
   const activeItems = items.filter((item) => item.isActive);
-  const lowStockItems = activeItems.filter((item) => item.stockOnHand <= item.minimumStock);
+  const lowStockItems = activeItems.filter((item) => item.stockOnHand > 0 && item.stockOnHand <= item.minimumStock);
   const outOfStockItems = activeItems.filter((item) => item.stockOnHand === 0);
+  const filteredItems =
+    itemStockFilter === "low"
+      ? lowStockItems
+      : itemStockFilter === "out"
+        ? outOfStockItems
+        : items;
   const inventoryValue = items.reduce((total, item) => total + item.stockOnHand * item.averageCost, 0);
   const selectedRecipeItem = items.find((item) => item.id === recipeItemForm.inventoryItemId);
   const recipeUnitOptions = useMemo(
@@ -280,6 +305,11 @@ export function AdminInventoryDashboard() {
     }
     const query = params.toString();
     router.replace(query ? `/inventory?${query}` : "/inventory", { scroll: false });
+  }
+
+  function openFilteredItems(filter: StockFilter) {
+    setItemStockFilter(filter);
+    selectTab("items");
   }
 
   function resetItemForm() {
@@ -567,11 +597,15 @@ export function AdminInventoryDashboard() {
 
   return (
     <div className="space-y-5">
-      <section className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm text-[#7c6b60]">إدارة المخزن</p>
-          <h1 className="text-2xl font-semibold text-[#2f211c]">المخزن</h1>
-        </div>
+      <DashboardHero
+        className="-mx-4 lg:-ml-6 lg:mr-0"
+        image="/images/dashboard/inventory-dashboard-hero.jpg"
+        eyebrow="Inventory Control"
+        title="إدارة المخزن"
+        description="المخزون والمشتريات وحركة المواد"
+      />
+
+      <section className="flex justify-end">
         <button type="button" onClick={() => void loadData()} className="flex h-11 items-center gap-2 rounded-md border border-[#e4d8c8] bg-white px-4 text-sm font-semibold text-[#4a3b34] hover:bg-[#f5eee6]">
           <RefreshCw size={17} />
           تحديث
@@ -581,13 +615,7 @@ export function AdminInventoryDashboard() {
       {message ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p> : null}
       {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
 
-      <div className="flex gap-2 overflow-x-auto rounded-md border border-[#e4d8c8] bg-white p-2 shadow-sm">
-        {tabs.map((tab) => (
-          <button key={tab.id} type="button" onClick={() => selectTab(tab.id)} className={`h-10 shrink-0 rounded-md px-4 text-sm font-semibold ${activeTab === tab.id ? "bg-[#5d4032] text-white" : "text-[#4a3b34] hover:bg-[#f5eee6]"}`}>
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <ManagementTabs tabs={tabs} activeTab={activeTab} onChange={selectTab} ariaLabel="أقسام إدارة المخزن" />
 
       {isLoading ? <div className="rounded-md border border-[#e4d8c8] bg-white p-6 text-sm text-[#7c6b60] shadow-sm">جارٍ تحميل بيانات المخزن...</div> : null}
 
@@ -595,8 +623,8 @@ export function AdminInventoryDashboard() {
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <InventoryStat title="إجمالي المواد" value={formatNumber(activeItems.length)} helper="المواد النشطة فقط" />
-            <InventoryStat title="مواد منخفضة" value={formatNumber(lowStockItems.length)} helper="الرصيد أقل أو يساوي الحد الأدنى" />
-            <InventoryStat title="مواد نفدت" value={formatNumber(outOfStockItems.length)} helper="الرصيد الحالي يساوي صفر" />
+            <InventoryStat title="مواد منخفضة" value={formatNumber(lowStockItems.length)} helper="اضغط لعرض المواد المنخفضة فقط" onClick={() => openFilteredItems("low")} />
+            <InventoryStat title="مواد نفدت" value={formatNumber(outOfStockItems.length)} helper="اضغط لعرض المواد النافدة فقط" onClick={() => openFilteredItems("out")} />
             <InventoryStat title="قيمة المخزون" value={formatCurrency(inventoryValue)} helper="حسب متوسط التكلفة الحالي" />
           </div>
           <section className="rounded-md border border-[#e4d8c8] bg-white p-4 shadow-sm">
@@ -673,8 +701,21 @@ export function AdminInventoryDashboard() {
           </form>
 
           <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
-            {items.length === 0 ? <div className="p-8 text-center text-sm text-[#7c6b60]">لا توجد مواد مخزنية حتى الآن</div> : null}
-            {items.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e4d8c8] bg-[#fbfaf7] p-4">
+              <div>
+                <h2 className="font-semibold text-[#2f211c]">قائمة المواد</h2>
+                <p className="mt-1 text-xs text-[#7c6b60]">
+                  {itemStockFilter === "low" ? "عرض المواد المنخفضة فقط" : itemStockFilter === "out" ? "عرض المواد النافدة فقط" : "عرض كل المواد"}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                <button type="button" onClick={() => setItemStockFilter("all")} className={`rounded-md border px-3 py-2 ${itemStockFilter === "all" ? "border-[#ff5656] bg-[#ff5656] text-white" : "border-[#e4d8c8] bg-white text-[#4a3b34] hover:bg-[#f5eee6]"}`}>كل المواد</button>
+                <button type="button" onClick={() => setItemStockFilter("low")} className={`rounded-md border px-3 py-2 ${itemStockFilter === "low" ? "border-[#ff5656] bg-[#ff5656] text-white" : "border-[#e4d8c8] bg-white text-[#4a3b34] hover:bg-[#f5eee6]"}`}>مواد منخفضة</button>
+                <button type="button" onClick={() => setItemStockFilter("out")} className={`rounded-md border px-3 py-2 ${itemStockFilter === "out" ? "border-[#ff5656] bg-[#ff5656] text-white" : "border-[#e4d8c8] bg-white text-[#4a3b34] hover:bg-[#f5eee6]"}`}>مواد نافدة</button>
+              </div>
+            </div>
+            {filteredItems.length === 0 ? <div className="p-8 text-center text-sm text-[#7c6b60]">لا توجد مواد مطابقة لهذا العرض</div> : null}
+            {filteredItems.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="min-w-[980px] w-full border-collapse text-sm">
                   <thead className="bg-[#f5eee6] text-[#4a3b34]">
@@ -689,7 +730,7 @@ export function AdminInventoryDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#eee4d8]">
-                    {items.map((item) => (
+                    {filteredItems.map((item) => (
                       <tr key={item.id} className="hover:bg-[#fffaf4]">
                         <td className="px-3 py-3 font-medium text-[#2f211c]">{item.nameAr}</td>
                         <td className="px-3 py-3 text-[#4a3b34]">{formatQuantity(item.stockOnHand, item.baseUnitCode)}</td>

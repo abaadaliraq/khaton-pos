@@ -3,6 +3,8 @@
 :root {
   --background: #f7f4ed;
   --foreground: #1c1917;
+  --khatoun-red: #ff5656;
+  --khatoun-dark-bg: #2b2b2b;
 }
 
 @theme inline {
@@ -32,6 +34,93 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.operational-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.operational-brand-logo {
+  width: clamp(48px, 4vw, 58px);
+  height: clamp(48px, 4vw, 58px);
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.operational-brand-name {
+  color: var(--khatoun-red);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.operational-brand-title {
+  margin-top: 2px;
+  color: #ffffff;
+  font-size: clamp(18px, 1.5vw, 24px);
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.operational-brand-subtitle,
+.operational-brand-meta {
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.operational-brand[data-variant="light"] .operational-brand-title {
+  color: #111111;
+}
+
+.operational-brand[data-variant="light"] .operational-brand-subtitle,
+.operational-brand[data-variant="light"] .operational-brand-meta {
+  color: #5f5f5f;
+}
+
+.operational-toast {
+  position: fixed;
+  top: 84px;
+  left: 16px;
+  z-index: 80;
+  display: flex;
+  width: min(360px, calc(100vw - 32px));
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-right: 4px solid var(--khatoun-red);
+  border-radius: 8px;
+  background: #2f2f2f;
+  color: #ffffff;
+  padding: 14px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+}
+
+.operational-toast[data-tone="ready"] {
+  border-right-color: #34d399;
+}
+
+.operational-toast-title {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.operational-toast-table {
+  margin-top: 2px;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.operational-toast-message {
+  margin-top: 3px;
+  color: #d4d4d8;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .management-shell {
   --management-bg: #292929;
   --management-sidebar: #202020;
@@ -42,7 +131,7 @@ button:disabled {
   --management-text: #ffffff;
   --management-muted: #d4d4d8;
   --management-soft: #a1a1aa;
-  --management-accent: #ff5656;
+  --management-accent: var(--khatoun-red);
   min-height: 100vh;
   background: var(--management-bg);
   color: var(--management-text);
@@ -155,6 +244,324 @@ button:disabled {
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.14) !important;
 }
 
+.management-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: #2f2f2f;
+  padding: 8px;
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.14);
+}
+
+.management-tab {
+  min-height: 40px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: #333333;
+  color: #f2f2f2;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.management-tab:hover:not(:disabled):not([data-active="true"]) {
+  border-color: rgba(255, 86, 86, 0.35);
+  background: #3d3d3d;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.management-tab:focus-visible {
+  box-shadow: 0 0 0 2px rgba(255, 86, 86, 0.25);
+}
+
+.management-tab[data-active="true"] {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: var(--khatoun-red);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(255, 86, 86, 0.18);
+}
+
+.management-tab:disabled {
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.06);
+  background: #292929;
+  color: #777777;
+  opacity: 0.65;
+  transform: none;
+  box-shadow: none;
+}
+
+.captain-shell {
+  --captain-accent: var(--khatoun-red);
+  --captain-bg: #f7f7f7;
+  --captain-header: rgba(255, 255, 255, 0.94);
+  --captain-card: #ffffff;
+  --captain-card-soft: #f7f7f7;
+  --captain-card-raised: #ffffff;
+  --captain-border: rgba(0, 0, 0, 0.12);
+  --captain-border-strong: rgba(0, 0, 0, 0.18);
+  --captain-text: #111111;
+  --captain-muted: #5f5f5f;
+  --captain-soft: #8a8a8a;
+  min-height: 100vh;
+  background: var(--captain-bg);
+  color: var(--captain-text);
+}
+
+.captain-shell[data-theme="dark"] {
+  --captain-bg: #292929;
+  --captain-header: rgba(32, 32, 32, 0.96);
+  --captain-card: #343434;
+  --captain-card-soft: #303030;
+  --captain-card-raised: #383838;
+  --captain-border: rgba(255, 255, 255, 0.08);
+  --captain-border-strong: rgba(255, 255, 255, 0.14);
+  --captain-text: #ffffff;
+  --captain-muted: #d4d4d8;
+  --captain-soft: #a1a1aa;
+}
+
+.captain-header {
+  border-bottom: 1px solid var(--captain-border);
+  background: var(--captain-header);
+  color: var(--captain-text);
+}
+
+.captain-card,
+.captain-product-card,
+.captain-subcard {
+  border: 1px solid var(--captain-border);
+  border-radius: 8px;
+  background: var(--captain-card);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.1);
+}
+
+.captain-product-card,
+.captain-subcard {
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.captain-product-card:hover {
+  border-color: rgba(255, 86, 86, 0.35);
+  transform: translateY(-1px);
+}
+
+.captain-heading {
+  color: var(--captain-text);
+}
+
+.captain-muted {
+  color: var(--captain-muted);
+}
+
+.captain-accent {
+  color: var(--captain-accent);
+}
+
+.captain-brand-mark,
+.captain-primary-button,
+.captain-category-tab[data-active="true"] {
+  border-radius: 8px;
+  border-color: var(--captain-accent);
+  background: var(--captain-accent);
+  color: #ffffff;
+}
+
+.captain-primary-button {
+  border: 1px solid var(--captain-accent);
+  justify-content: center;
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.captain-primary-button:hover:not(:disabled) {
+  background: #ff7070;
+  border-color: #ff7070;
+}
+
+.captain-primary-button:disabled {
+  border-color: var(--captain-border-strong);
+  background: var(--captain-card-soft);
+  color: var(--captain-soft);
+}
+
+.captain-secondary-button,
+.captain-control,
+.captain-icon-button,
+.captain-category-tab,
+.captain-table-option {
+  border: 1px solid var(--captain-border);
+  border-radius: 8px;
+  background: var(--captain-card-raised);
+  color: var(--captain-text);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.captain-control:hover,
+.captain-icon-button:hover,
+.captain-secondary-button:hover,
+.captain-category-tab:hover:not([data-active="true"]),
+.captain-table-option:hover {
+  border-color: rgba(255, 86, 86, 0.45);
+  background: var(--captain-card-soft);
+}
+
+.captain-category-tab[data-active="true"] {
+  box-shadow: 0 10px 24px rgba(255, 86, 86, 0.18);
+}
+
+.captain-input {
+  border: 1px solid var(--captain-border);
+  border-radius: 8px;
+  background: var(--captain-card-soft);
+  color: var(--captain-text);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+
+.captain-input::placeholder {
+  color: var(--captain-soft);
+}
+
+.captain-input:focus {
+  border-color: var(--captain-accent);
+  background: var(--captain-card);
+  box-shadow: 0 0 0 3px rgba(255, 86, 86, 0.16);
+}
+
+.captain-empty-state {
+  border: 1px dashed var(--captain-border-strong);
+  border-radius: 8px;
+  background: var(--captain-card);
+  color: var(--captain-muted);
+}
+
+.captain-summary {
+  border-radius: 8px;
+  background: var(--captain-card-soft);
+}
+
+.captain-divider {
+  border-color: var(--captain-border);
+}
+
+.captain-stepper {
+  border: 1px solid var(--captain-border);
+  border-radius: 8px;
+  color: var(--captain-text);
+}
+
+.captain-stepper span {
+  border-color: var(--captain-border);
+}
+
+.captain-stepper button:hover:not(:disabled) {
+  background: var(--captain-card-soft);
+}
+
+.captain-stepper button:disabled {
+  color: var(--captain-soft);
+}
+
+.khatoun-loader-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  min-height: 100vh;
+  background: var(--khatoun-dark-bg);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.khatoun-loader-content {
+  display: grid;
+  justify-items: center;
+}
+
+.khatoun-loader-dots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.khatoun-loader-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: var(--khatoun-red);
+  opacity: 0.45;
+  transform: scale(0.7);
+  animation: khatounDotPulse 1000ms ease-in-out infinite;
+}
+
+.khatoun-loader-dot:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.khatoun-loader-dot:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+.khatoun-loader-text {
+  margin-top: 16px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+@keyframes khatounDotPulse {
+  0%,
+  60%,
+  100% {
+    transform: scale(0.7);
+    opacity: 0.45;
+  }
+
+  30% {
+    transform: scale(1.35);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .khatoun-loader-dot,
+  .management-tab {
+    animation: none;
+    transition: none;
+  }
+
+  .khatoun-loader-dot {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+
+  .management-tab:hover:not(:disabled):not([data-active="true"]) {
+    transform: none;
+  }
+}
+
+.management-shell :where(.finance-payment-voucher, .finance-payment-voucher-paper, .finance-payment-voucher .bg-white) {
+  background: #ffffff !important;
+}
+
+.management-shell :where(.finance-payment-voucher .bg-\[\#faf7f6\]) {
+  background: #faf7f6 !important;
+}
+
+.finance-payment-voucher {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
 @media print {
   body {
     background: #ffffff;
@@ -208,6 +615,11 @@ button:disabled {
     margin: 12mm;
   }
 
+  @page finance-payment-voucher-page {
+    size: A4 portrait;
+    margin: 10mm 12mm;
+  }
+
   body:has(.finance-payment-voucher) *,
   body:has(.finance-expense-voucher) * {
     visibility: hidden !important;
@@ -220,7 +632,6 @@ button:disabled {
     visibility: visible !important;
   }
 
-  body:has(.finance-payment-voucher) .finance-payment-voucher,
   body:has(.finance-expense-voucher) .finance-expense-voucher {
     position: fixed !important;
     inset: 0 !important;
@@ -230,6 +641,91 @@ button:disabled {
     box-shadow: none !important;
     padding: 0 !important;
     background: #ffffff !important;
+  }
+
+  body:has(.finance-payment-voucher) {
+    background: #ffffff !important;
+  }
+
+  body:has(.finance-payment-voucher) .finance-payment-voucher-backdrop {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    overflow: visible !important;
+    width: auto !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  body:has(.finance-payment-voucher) .finance-payment-voucher {
+    page: finance-payment-voucher-page;
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #1c1c1c !important;
+    direction: rtl;
+    font-family: var(--font-geist-sans), Tahoma, Arial, Helvetica, sans-serif;
+    line-height: 1.35;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body:has(.finance-payment-voucher) .finance-payment-voucher-paper {
+    display: flex !important;
+    min-height: calc(297mm - 20mm) !important;
+    max-height: calc(297mm - 20mm) !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    border: 1px solid #d8d8d8 !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    padding: 9mm 10mm !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body:has(.finance-payment-voucher) .finance-payment-voucher :where(.voucher-header, .voucher-title, .voucher-meta, .voucher-amount, .voucher-section, .voucher-notes, .voucher-signatures, .voucher-footer, .voucher-field) {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body:has(.finance-payment-voucher) .finance-payment-voucher :where(h2, h3, p) {
+    color: inherit;
+  }
+
+  body:has(.finance-payment-voucher) .finance-payment-voucher img {
+    max-height: 16mm !important;
+    object-fit: contain !important;
+  }
+
+  body:has(.finance-payment-voucher) .voucher-title {
+    padding-block: 9mm !important;
+  }
+
+  body:has(.finance-payment-voucher) .voucher-amount,
+  body:has(.finance-payment-voucher) .voucher-section {
+    margin-top: 6mm !important;
+  }
+
+  body:has(.finance-payment-voucher) .voucher-notes {
+    margin-top: 5mm !important;
+  }
+
+  body:has(.finance-payment-voucher) .voucher-signatures {
+    margin-top: 8mm !important;
+  }
+
+  body:has(.finance-payment-voucher) .voucher-footer {
+    margin-top: auto !important;
   }
 
   body:has(.finance-payment-voucher) .finance-payment-voucher-actions,

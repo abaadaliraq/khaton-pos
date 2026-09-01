@@ -1,13 +1,17 @@
 "use client";
 
-import { BarChart3, Clock, LogOut, UserRound } from "lucide-react";
+import { BarChart3, Clock, LogOut, UserRound, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { OperationalBrand } from "@/components/operational/OperationalBrand";
 import { signOut } from "@/services/authService";
 import type { UserSession } from "@/types/auth";
 
 type CashierHeaderProps = {
   session: UserSession;
+  soundEnabled: boolean;
+  soundNeedsActivation: boolean;
+  onToggleSound: () => void;
   onOpenShiftSummary: () => void;
 };
 
@@ -21,7 +25,7 @@ function getTime() {
   }).format(new Date());
 }
 
-export function CashierHeader({ session, onOpenShiftSummary }: CashierHeaderProps) {
+export function CashierHeader({ session, soundEnabled, soundNeedsActivation, onToggleSound, onOpenShiftSummary }: CashierHeaderProps) {
   const router = useRouter();
   const [time, setTime] = useState("");
 
@@ -42,11 +46,7 @@ export function CashierHeader({ session, onOpenShiftSummary }: CashierHeaderProp
   return (
     <header className="cashier-no-print border-b border-[#d8c9b7] bg-[#F7F1E8]">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-        <div>
-          <p className="text-sm font-semibold text-[#7B3F32]">خاتون / KHATOUN</p>
-          <h1 className="mt-1 text-2xl font-semibold text-[#2C211D]">نقطة البيع</h1>
-          <p className="text-sm text-[#7a665c]">واجهة المحاسب</p>
-        </div>
+        <OperationalBrand title="نقطة البيع" subtitle="واجهة المحاسب" meta={session.name} variant="light" />
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex h-10 items-center gap-2 rounded-lg border border-[#d8c9b7] bg-white px-3 text-sm text-[#2C211D] shadow-sm">
@@ -60,6 +60,14 @@ export function CashierHeader({ session, onOpenShiftSummary }: CashierHeaderProp
           <span className="h-10 rounded-lg border border-[#3B8F8B]/25 bg-[#3B8F8B]/10 px-3 py-2 text-sm font-medium text-[#2f7470]">
             الوردية مفتوحة
           </span>
+          <button
+            type="button"
+            onClick={onToggleSound}
+            className="flex h-10 items-center gap-2 rounded-lg border border-[#d8c9b7] bg-white px-3 text-sm font-medium text-[#2C211D] shadow-sm hover:bg-[#E8DCCB]"
+          >
+            {soundEnabled ? <Volume2 size={16} className="text-[#ff5656]" /> : <VolumeX size={16} />}
+            {soundNeedsActivation ? "اضغط لتفعيل الصوت" : soundEnabled ? "الصوت مفعل" : "الصوت مكتوم"}
+          </button>
           <button
             type="button"
             onClick={onOpenShiftSummary}

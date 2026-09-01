@@ -10,7 +10,7 @@ type ProductGridProps = {
 export function ProductGrid({ items, onAdd }: ProductGridProps) {
   if (items.length === 0) {
     return (
-      <div className="flex min-h-64 flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 bg-white text-center text-stone-500">
+      <div className="captain-empty-state flex min-h-64 flex-col items-center justify-center text-center">
         <SearchX size={32} />
         <p className="mt-3 font-medium">لا توجد أصناف مطابقة</p>
       </div>

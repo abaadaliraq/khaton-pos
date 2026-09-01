@@ -16,12 +16,8 @@ export function CategoryTabs({ categories, activeCategory, onChange }: CategoryT
             key={category.id}
             type="button"
             onClick={() => onChange(category.id)}
-            className={clsx(
-              "rounded-lg border px-4 py-2 text-sm font-medium transition",
-              activeCategory === category.id
-                ? "border-[#4c5a35] bg-[#4c5a35] text-white shadow-sm"
-                : "border-stone-200 bg-white text-stone-700 hover:border-[#4c5a35]/50",
-            )}
+            data-active={activeCategory === category.id}
+            className={clsx("captain-category-tab rounded-lg border px-4 py-2 text-sm font-medium transition")}
           >
             {category.name}
           </button>

@@ -1,14 +1,16 @@
 "use client";
 
-import { ChefHat, Clock, LogOut, Maximize, Minimize, Volume2, VolumeX, Wifi } from "lucide-react";
+import { Clock, LogOut, Maximize, Minimize, Volume2, VolumeX, Wifi } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { OperationalBrand } from "@/components/operational/OperationalBrand";
 import { signOut } from "@/services/authService";
 import type { UserSession } from "@/types/auth";
 
 type KitchenHeaderProps = {
   session: UserSession;
   soundEnabled: boolean;
+  soundNeedsActivation: boolean;
   onToggleSound: () => void;
   onOpenCompleted: () => void;
   onAddDemoOrder: () => void;
@@ -35,6 +37,7 @@ function getDateTime() {
 export function KitchenHeader({
   session,
   soundEnabled,
+  soundNeedsActivation,
   onToggleSound,
   onOpenCompleted,
   onAddDemoOrder,
@@ -79,16 +82,7 @@ export function KitchenHeader({
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-[#171513]">
       <div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-3 px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#D88A3D] text-[#171513]">
-            <ChefHat size={26} />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-[#D88A3D]">خاتون / KHATOUN</p>
-            <h1 className="text-2xl font-semibold text-[#FFF8EE]">شاشة المطبخ</h1>
-            <p className="text-sm text-[#C9BEB2]">{session.name}</p>
-          </div>
-        </div>
+        <OperationalBrand title="شاشة المطبخ" subtitle="المطبخ على" meta={session.name} />
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="hidden h-11 items-center gap-2 rounded-lg border border-white/10 bg-[#24211E] px-3 text-sm text-[#FFF8EE] md:flex">
@@ -105,7 +99,7 @@ export function KitchenHeader({
           </button>
           <button type="button" onClick={onToggleSound} className="flex h-11 items-center gap-2 rounded-lg bg-[#302B27] px-3 text-sm text-[#FFF8EE] hover:bg-[#3b3631]">
             {soundEnabled ? <Volume2 size={17} /> : <VolumeX size={17} />}
-            {soundEnabled ? "الصوت مفعل" : "الصوت مكتوم"}
+            {soundNeedsActivation ? "اضغط لتفعيل الصوت" : soundEnabled ? "الصوت مفعل" : "الصوت مكتوم"}
           </button>
           <button type="button" onClick={toggleFullscreen} className="flex h-11 items-center gap-2 rounded-lg bg-[#D88A3D] px-3 text-sm font-semibold text-[#171513] hover:bg-[#e29b54]">
             {isFullscreen ? <Minimize size={17} /> : <Maximize size={17} />}
