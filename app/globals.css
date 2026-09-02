@@ -576,24 +576,61 @@ button:disabled {
     width: 72mm;
     margin: 0 auto;
     color: #111111;
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: Tahoma, Arial, Helvetica, sans-serif;
     font-size: 12px;
-    line-height: 1.45;
+    line-height: 1.4;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   .cashier-print-receipt h1 {
-    margin: 0 0 8px;
+    margin: 0;
     text-align: center;
-    font-size: 16px;
+    font-size: 17px;
+    font-weight: 800;
   }
 
+  .cashier-print-receipt h2 {
+    margin: 6px 0 4px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  .cashier-print-receipt h3,
   .cashier-print-receipt p {
-    margin: 4px 0;
+    margin: 0;
   }
 
-  .cashier-print-receipt hr {
+  .receipt-header {
+    text-align: center;
+  }
+
+  .receipt-brand-en {
+    margin-top: 2px !important;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .receipt-payment-status,
+  .receipt-unpaid {
+    margin-top: 7px !important;
+    border: 1px solid #111111;
+    padding: 4px 6px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .receipt-meta,
+  .receipt-totals {
+    margin-top: 8px;
+  }
+
+  .receipt-divider {
     margin: 8px 0;
-    border: 0;
     border-top: 1px dashed #111111;
   }
 
@@ -601,7 +638,62 @@ button:disabled {
     display: flex;
     justify-content: space-between;
     gap: 8px;
-    margin: 4px 0;
+    margin: 3px 0;
+  }
+
+  .receipt-row > span:first-child,
+  .receipt-total-row > span:first-child {
+    min-width: 0;
+  }
+
+  .receipt-row > span:last-child,
+  .receipt-total-row > span:last-child {
+    flex-shrink: 0;
+    text-align: left;
+  }
+
+  .receipt-table-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    border-bottom: 1px dashed #111111;
+    padding-bottom: 4px;
+    font-weight: 800;
+  }
+
+  .receipt-round + .receipt-round {
+    margin-top: 8px;
+  }
+
+  .receipt-item {
+    padding: 6px 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .receipt-item + .receipt-item {
+    border-top: 1px dotted #777777;
+  }
+
+  .receipt-item h3 {
+    margin-bottom: 3px;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .receipt-total-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 7px;
+    border-top: 1px dashed #111111;
+    padding-top: 6px;
+    font-size: 18px;
+    font-weight: 800;
+  }
+
+  .receipt-unpaid {
+    margin-top: 10px !important;
   }
 
   .receipt-thanks {
@@ -610,9 +702,23 @@ button:disabled {
     font-weight: 700;
   }
 
+  .receipt-footer {
+    margin-top: 12px;
+    text-align: center;
+    font-weight: 700;
+  }
+
+  .receipt-footer small {
+    display: block;
+    margin-top: 6px;
+    font-size: 9px;
+    font-weight: 400;
+    line-height: 1.4;
+  }
+
   @page {
-    size: A5 portrait;
-    margin: 12mm;
+    size: 80mm auto;
+    margin: 0;
   }
 
   @page finance-payment-voucher-page {

@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { kitchenStatusLabels } from "@/config/kitchen";
 import { KitchenOrderItems } from "@/components/kitchen/KitchenOrderItems";
+import { formatOrderLabel } from "@/lib/displayFormat";
 import { formatElapsedTime, formatKitchenClock } from "@/lib/formatElapsedTime";
 import type { KitchenOrder } from "@/types/kitchen";
 
@@ -20,8 +21,13 @@ export function KitchenOrderDetails({ order, now, onClose }: KitchenOrderDetails
       <div className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-white/10 bg-[#24211E] p-5 shadow-xl">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[#C9BEB2]">طلب {order.id}</p>
+            <p className="text-[#C9BEB2]">{formatOrderLabel(order.orderNumber)}</p>
             <h2 className="text-3xl font-semibold text-[#FFF8EE]">طاولة {order.tableId}</h2>
+            {order.roundNo > 1 ? (
+              <span className="mt-2 inline-flex rounded-full bg-[#B94B43] px-3 py-1 text-sm font-bold text-white">
+                إضافة #{order.roundNo}
+              </span>
+            ) : null}
           </div>
           <button type="button" onClick={onClose} className="rounded-lg border border-white/10 p-2 text-[#FFF8EE] hover:bg-[#302B27]">
             <X size={20} />
@@ -34,7 +40,7 @@ export function KitchenOrderDetails({ order, now, onClose }: KitchenOrderDetails
           <span>وصل: {formatKitchenClock(order.timing.receivedAt)} / {formatElapsedTime(order.timing.receivedAt, now)}</span>
           <span>بدأ التحضير: {formatKitchenClock(order.timing.startedAt)}</span>
           <span>جاهز: {formatKitchenClock(order.timing.readyAt)}</span>
-          <span>تم التسليم: {formatKitchenClock(order.timing.servedAt)}</span>
+          <span>تم التقديم: {formatKitchenClock(order.timing.servedAt)}</span>
         </div>
 
         <div className="mt-5">

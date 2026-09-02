@@ -1,4 +1,5 @@
 export type CashierTableStatus = "available" | "occupied" | "waiting_payment" | "paid" | "reserved";
+export type CashierOrderRawStatus = "submitted" | "preparing" | "ready" | "served" | "awaiting_payment" | "paid";
 
 export type PaymentMethod = "cash" | "card" | "transfer" | "mixed";
 
@@ -29,21 +30,35 @@ export type CashierOrderItem = {
 
 export type CashierOrder = {
   id: string;
+  orderNumber: number;
+  tableSessionId: string;
+  roundNo: number;
   tableId: number;
   captainName: string;
   openedAt: string;
   guests?: number;
   status: Exclude<CashierTableStatus, "available" | "reserved">;
+  rawStatus: CashierOrderRawStatus;
   items: CashierOrderItem[];
   discount?: DiscountData;
   serviceFee: number;
   payments: PaymentRecord[];
+  rounds?: CashierOrder[];
+  isNewAddition?: boolean;
 };
+
+export type CashierTableBillingStatus = "blocked" | "payable" | "paid" | "empty";
 
 export type CashierTable = {
   id: number;
   databaseId?: string;
   status: CashierTableStatus;
+  tableSessionId?: string;
+  orders?: CashierOrder[];
+  unpaidOrders?: CashierOrder[];
+  paidOrders?: CashierOrder[];
+  billingStatus?: CashierTableBillingStatus;
+  hasBusyOrders?: boolean;
   order?: CashierOrder;
 };
 

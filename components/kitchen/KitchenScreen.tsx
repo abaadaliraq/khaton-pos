@@ -11,6 +11,7 @@ import { KitchenToolbar } from "@/components/kitchen/KitchenToolbar";
 import { OperationalToast } from "@/components/operational/OperationalToast";
 import { useOperationalNotifications } from "@/components/operational/useOperationalNotifications";
 import { kitchenActiveStatuses } from "@/config/kitchen";
+import { getTimestamp } from "@/lib/displayFormat";
 import { isKitchenOrderLate, matchesKitchenFilter, matchesKitchenSearch } from "@/lib/kitchenOrders";
 import { createClient } from "@/lib/supabase/client";
 import { getKitchenOrders, updateKitchenOrderStatus } from "@/services/kitchenService";
@@ -152,7 +153,7 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
         return (
           secondLate - firstLate ||
           secondPriority - firstPriority ||
-          new Date(first.timing.receivedAt).getTime() - new Date(second.timing.receivedAt).getTime()
+          (getTimestamp(first.timing.receivedAt) ?? 0) - (getTimestamp(second.timing.receivedAt) ?? 0)
         );
       });
   }, [filter, now, orders, searchTerm]);
@@ -167,7 +168,7 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
   }, [now, orders]);
 
   async function changeStatus(orderId: string, nextStatus: KitchenOrderStatus) {
-    if (nextStatus === "new" || nextStatus === "cancelled") {
+    if (nextStatus !== "preparing" && nextStatus !== "ready") {
       return;
     }
 

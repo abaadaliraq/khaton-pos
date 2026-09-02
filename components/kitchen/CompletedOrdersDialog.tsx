@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { formatOrderLabel, getTimestamp } from "@/lib/displayFormat";
 import { formatKitchenClock } from "@/lib/formatElapsedTime";
 import { getPreparationMinutes } from "@/lib/kitchenOrders";
 import type { KitchenOrder } from "@/types/kitchen";
@@ -16,7 +17,7 @@ export function CompletedOrdersDialog({ orders, isOpen, onClose }: CompletedOrde
 
   const latestServed = orders
     .filter((order) => order.status === "served")
-    .sort((first, second) => new Date(second.timing.servedAt ?? 0).getTime() - new Date(first.timing.servedAt ?? 0).getTime())
+    .sort((first, second) => (getTimestamp(second.timing.servedAt) ?? 0) - (getTimestamp(first.timing.servedAt) ?? 0))
     .slice(0, 10);
 
   return (
@@ -36,7 +37,7 @@ export function CompletedOrdersDialog({ orders, isOpen, onClose }: CompletedOrde
               return (
                 <article key={order.id} className="rounded-lg border border-white/10 bg-[#171513] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h3 className="text-xl font-semibold text-[#FFF8EE]">طاولة {order.tableId} / طلب {order.id}</h3>
+                    <h3 className="text-xl font-semibold text-[#FFF8EE]">طاولة {order.tableId} / {formatOrderLabel(order.orderNumber)}</h3>
                     <span className="text-[#D88A3D]">مدة التحضير: {prepMinutes ?? "-"} دقيقة</span>
                   </div>
                   <div className="mt-3 grid gap-2 text-sm text-[#C9BEB2] sm:grid-cols-4">

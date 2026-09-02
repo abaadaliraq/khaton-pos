@@ -35,6 +35,18 @@ export async function recordOrderPayment(orderId: string, payments: PaymentInput
   }
 }
 
+export async function recordTablePayment(tableSessionId: string, payments: PaymentInput[]) {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("record_table_payment", {
+    p_table_session_id: tableSessionId,
+    p_payments: payments as Json,
+  } as never);
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function closePaidTable(orderId: string) {
   const supabase = createClient();
   const { error } = await supabase.rpc("close_paid_table", {

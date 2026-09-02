@@ -1,8 +1,8 @@
 "use client";
 
-import { Search, X } from "lucide-react";
+import { Info, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CaptainHeader } from "@/components/captain/CaptainHeader";
 import { CategoryTabs } from "@/components/captain/CategoryTabs";
 import { OrderPanel } from "@/components/captain/OrderPanel";
@@ -13,7 +13,7 @@ import { OperationalToast } from "@/components/operational/OperationalToast";
 import { useOperationalNotifications } from "@/components/operational/useOperationalNotifications";
 import { signOut } from "@/services/authService";
 import { getMenuCatalog } from "@/services/menuService";
-import { createRestaurantOrder } from "@/services/orderService";
+import { createRestaurantOrder, markOrderAwaitingPaymentByCaptain, releasePaidTable } from "@/services/orderService";
 import { getRestaurantTables } from "@/services/tableService";
 import type { Category, MenuItem, OrderItem, RestaurantTable } from "@/types/pos";
 
@@ -41,22 +41,27 @@ export function CaptainPosApp() {
   const [isTableSelectorOpen, setIsTableSelectorOpen] = useState(false);
   const [isOrderSheetOpen, setIsOrderSheetOpen] = useState(false);
   const [isSendDialogOpen, setIsSendDialogOpen] = useState(false);
+  const [pendingTable, setPendingTable] = useState<RestaurantTable | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
   const [loadError, setLoadError] = useState("");
   const [noteItemId, setNoteItemId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState("");
   const [isSendingOrder, setIsSendingOrder] = useState(false);
+  const [confirmingServedOrderId, setConfirmingServedOrderId] = useState<string | null>(null);
+  const [releasingTableId, setReleasingTableId] = useState<number | null>(null);
   const [theme, setTheme] = useState<CaptainTheme>("light");
+  const tablePromptTimerRef = useRef<number>(0);
 
   const reloadTables = useCallback(async () => {
     const restaurantTables = await getRestaurantTables();
     setTables(restaurantTables);
     setSelectedTable((currentTable) => {
       if (!currentTable) {
-        return restaurantTables[0] ?? null;
+        return null;
       }
 
-      return restaurantTables.find((table) => table.id === currentTable.id) ?? restaurantTables[0] ?? null;
+      const updatedTable = restaurantTables.find((table) => table.id === currentTable.id);
+      return updatedTable?.canAddOrder ? updatedTable : null;
     });
   }, []);
 
@@ -94,7 +99,7 @@ export function CaptainPosApp() {
         setCategories(catalog.categories);
         setMenuItems(catalog.menuItems);
         setTables(restaurantTables);
-        setSelectedTable(restaurantTables[0] ?? null);
+        setSelectedTable(null);
       } catch (error) {
         console.error("Failed to load captain data", error);
 
@@ -143,7 +148,59 @@ export function CaptainPosApp() {
 
   const itemCount = useMemo(() => orderItems.reduce((total, orderItem) => total + orderItem.quantity, 0), [orderItems]);
 
+  function showTransientMessage(message: string) {
+    setSuccessMessage(message);
+    window.setTimeout(() => setSuccessMessage(""), 2500);
+  }
+
+  function promptForTable() {
+    const now = Date.now();
+    if (now - tablePromptTimerRef.current < 1800) {
+      return;
+    }
+
+    tablePromptTimerRef.current = now;
+    showTransientMessage("اختر الطاولة أولاً");
+  }
+
+  function selectTable(table: RestaurantTable) {
+    if (!table.canAddOrder) {
+      showTransientMessage("هذه الطاولة غير متاحة");
+      return;
+    }
+
+    if (selectedTable?.id === table.id) {
+      setIsTableSelectorOpen(false);
+      return;
+    }
+
+    if (orderItems.length > 0) {
+      setPendingTable(table);
+      return;
+    }
+
+    setSelectedTable(table);
+    setIsTableSelectorOpen(false);
+  }
+
+  function confirmTableChange() {
+    if (!pendingTable) {
+      return;
+    }
+
+    setOrderItems([]);
+    setNoteItemId(null);
+    setSelectedTable(pendingTable);
+    setPendingTable(null);
+    setIsTableSelectorOpen(false);
+  }
+
   function addItem(item: MenuItem) {
+    if (!selectedTable) {
+      promptForTable();
+      return;
+    }
+
     if (item.price <= 0) {
       return;
     }
@@ -162,6 +219,11 @@ export function CaptainPosApp() {
   }
 
   function updateQuantity(itemId: string, direction: "increase" | "decrease") {
+    if (!selectedTable) {
+      promptForTable();
+      return;
+    }
+
     setOrderItems((currentItems) =>
       currentItems.map((orderItem) => {
         if (orderItem.item.id !== itemId) {
@@ -175,18 +237,40 @@ export function CaptainPosApp() {
   }
 
   function removeItem(itemId: string) {
+    if (!selectedTable) {
+      promptForTable();
+      return;
+    }
+
     setOrderItems((currentItems) => currentItems.filter((orderItem) => orderItem.item.id !== itemId));
     setNoteItemId((currentNoteItemId) => (currentNoteItemId === itemId ? null : currentNoteItemId));
   }
 
   function updateNote(itemId: string, note: string) {
+    if (!selectedTable) {
+      promptForTable();
+      return;
+    }
+
     setOrderItems((currentItems) =>
       currentItems.map((orderItem) => (orderItem.item.id === itemId ? { ...orderItem, note } : orderItem)),
     );
   }
 
+  function toggleNote(itemId: string) {
+    if (!selectedTable) {
+      promptForTable();
+      return;
+    }
+
+    setNoteItemId((currentItemId) => (currentItemId === itemId ? null : itemId));
+  }
+
   async function confirmSendOrder() {
     if (!selectedTable || orderItems.length === 0 || isSendingOrder) {
+      if (!selectedTable) {
+        promptForTable();
+      }
       return;
     }
 
@@ -200,17 +284,62 @@ export function CaptainPosApp() {
       });
 
       await reloadTables();
+      setSelectedTable(null);
       setIsSendDialogOpen(false);
       setIsOrderSheetOpen(false);
       setOrderItems([]);
       setNoteItemId(null);
-      setSuccessMessage("تم إرسال طلب الطاولة بنجاح");
+      setSuccessMessage(selectedTable.status === "occupied" ? "تم إرسال الطلب الإضافي بنجاح" : "تم إرسال طلب الطاولة بنجاح");
       window.setTimeout(() => setSuccessMessage(""), 3500);
     } catch (error) {
       console.error("Failed to submit order", error);
       setLoadError("تعذر إرسال الطلب إلى Supabase.");
     } finally {
       setIsSendingOrder(false);
+    }
+  }
+
+  async function confirmServed(table: RestaurantTable) {
+    const order = table.currentOrder;
+    if (!order || order.status !== "ready" || confirmingServedOrderId === order.id) {
+      return;
+    }
+
+    setConfirmingServedOrderId(order.id);
+    setLoadError("");
+
+    try {
+      await markOrderAwaitingPaymentByCaptain(order.id);
+      await reloadTables();
+      setSuccessMessage("تم تأكيد تقديم الطلب");
+      window.setTimeout(() => setSuccessMessage(""), 3500);
+    } catch (error) {
+      console.error("Failed to confirm served order", error);
+      setLoadError("تعذر تأكيد تقديم الطلب في Supabase.");
+    } finally {
+      setConfirmingServedOrderId(null);
+    }
+  }
+
+  async function releaseTable(table: RestaurantTable) {
+    const order = table.currentOrder;
+    if (!order || order.status !== "paid" || releasingTableId === table.id) {
+      return;
+    }
+
+    setReleasingTableId(table.id);
+    setLoadError("");
+
+    try {
+      await releasePaidTable(order.id);
+      await reloadTables();
+      setSuccessMessage("تم إخلاء الطاولة");
+      window.setTimeout(() => setSuccessMessage(""), 3500);
+    } catch (error) {
+      console.error("Failed to release table", error);
+      setLoadError("تعذر إخلاء الطاولة في Supabase.");
+    } finally {
+      setReleasingTableId(null);
     }
   }
 
@@ -247,7 +376,11 @@ export function CaptainPosApp() {
             isOpen={isTableSelectorOpen}
             onOpen={() => setIsTableSelectorOpen(true)}
             onClose={() => setIsTableSelectorOpen(false)}
-            onSelect={setSelectedTable}
+            onSelect={selectTable}
+            onConfirmServed={confirmServed}
+            onReleaseTable={releaseTable}
+            confirmingServedOrderId={confirmingServedOrderId}
+            releasingTableId={releasingTableId}
           />
 
           {loadError ? (
@@ -257,6 +390,7 @@ export function CaptainPosApp() {
           ) : null}
 
           <section className="captain-card p-3">
+            <p className="captain-muted mb-2 text-xs">02 المنيو</p>
             <div className="relative">
               <Search className="captain-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" size={18} />
               <input
@@ -278,11 +412,27 @@ export function CaptainPosApp() {
             </div>
           </section>
 
-          <section className="captain-card p-3">
-            <CategoryTabs categories={categories} activeCategory={activeCategory} onChange={setActiveCategory} />
-          </section>
+          <div className="relative">
+            {!selectedTable ? (
+              <button
+                type="button"
+                onClick={promptForTable}
+                className="absolute inset-0 z-10 flex min-h-64 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-[#ff5656]/35 bg-[var(--captain-card)]/70 px-4 text-center backdrop-blur-[1px]"
+              >
+                <Info size={28} className="captain-accent" />
+                <span className="captain-heading text-base font-bold">يرجى اختيار الطاولة قبل إضافة الطلب</span>
+              </button>
+            ) : null}
+            <div className={!selectedTable ? "pointer-events-none opacity-55" : "opacity-100"}>
+              <section className="captain-card p-3">
+                <CategoryTabs categories={categories} activeCategory={activeCategory} onChange={setActiveCategory} />
+              </section>
 
-          <ProductGrid items={filteredItems} onAdd={addItem} />
+              <div className="mt-4">
+                <ProductGrid items={filteredItems} onAdd={addItem} isDisabled={!selectedTable} />
+              </div>
+            </div>
+          </div>
         </div>
 
         <OrderPanel
@@ -290,6 +440,7 @@ export function CaptainPosApp() {
           selectedTable={selectedTable}
           subtotal={subtotal}
           itemCount={itemCount}
+          isSendingOrder={isSendingOrder}
           isMobileOpen={isOrderSheetOpen}
           noteItemId={noteItemId}
           onMobileOpen={() => setIsOrderSheetOpen(true)}
@@ -297,7 +448,7 @@ export function CaptainPosApp() {
           onIncrease={(itemId) => updateQuantity(itemId, "increase")}
           onDecrease={(itemId) => updateQuantity(itemId, "decrease")}
           onRemove={removeItem}
-          onToggleNote={(itemId) => setNoteItemId((currentItemId) => (currentItemId === itemId ? null : itemId))}
+          onToggleNote={toggleNote}
           onNoteChange={updateNote}
           onSend={() => setIsSendDialogOpen(true)}
         />
@@ -317,6 +468,32 @@ export function CaptainPosApp() {
         onClose={() => setIsSendDialogOpen(false)}
         onConfirm={confirmSendOrder}
       />
+      {pendingTable ? (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/45 p-4">
+          <div className="captain-card w-full max-w-md p-4 shadow-xl">
+            <h2 className="captain-heading text-lg font-bold">تغيير الطاولة</h2>
+            <p className="captain-muted mt-3 text-sm leading-6">
+              يوجد طلب قيد الإعداد للطاولة الحالية. هل تريد تغيير الطاولة ومسح الطلب الحالي؟
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingTable(null)}
+                className="captain-secondary-button h-11 text-sm font-bold"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={confirmTableChange}
+                className="captain-primary-button h-11 text-sm font-bold"
+              >
+                تغيير الطاولة ومسح الطلب
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <OperationalToast toast={notifications.toast} />
     </div>
   );

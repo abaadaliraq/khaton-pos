@@ -20,6 +20,8 @@ export type KitchenOrderItem = {
 
 export type KitchenOrder = {
   id: string;
+  orderNumber: number;
+  roundNo: number;
   tableId: number;
   captainName: string;
   status: KitchenOrderStatus;
@@ -28,7 +30,8 @@ export type KitchenOrder = {
   items: KitchenOrderItem[];
 };
 
-export type KitchenOrderSeed = Omit<KitchenOrder, "timing"> & {
+export type KitchenOrderSeed = Omit<KitchenOrder, "timing" | "roundNo"> & {
+  roundNo?: number;
   receivedMinutesAgo: number;
   startedMinutesAgo?: number;
   readyMinutesAgo?: number;

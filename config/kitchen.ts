@@ -6,7 +6,7 @@ export const kitchenStatusLabels: Record<KitchenOrderStatus, string> = {
   new: "طلب جديد",
   preparing: "قيد التحضير",
   ready: "جاهز للتقديم",
-  served: "تم التسليم",
+  served: "تم التقديم",
   cancelled: "ملغي",
 };
 

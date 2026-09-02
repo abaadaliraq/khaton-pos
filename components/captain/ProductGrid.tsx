@@ -5,9 +5,10 @@ import type { MenuItem } from "@/types/pos";
 type ProductGridProps = {
   items: MenuItem[];
   onAdd: (item: MenuItem) => void;
+  isDisabled: boolean;
 };
 
-export function ProductGrid({ items, onAdd }: ProductGridProps) {
+export function ProductGrid({ items, onAdd, isDisabled }: ProductGridProps) {
   if (items.length === 0) {
     return (
       <div className="captain-empty-state flex min-h-64 flex-col items-center justify-center text-center">
@@ -20,7 +21,7 @@ export function ProductGrid({ items, onAdd }: ProductGridProps) {
   return (
     <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {items.map((item) => (
-        <ProductCard key={item.id} item={item} onAdd={onAdd} />
+        <ProductCard key={item.id} item={item} onAdd={onAdd} isDisabled={isDisabled} />
       ))}
     </div>
   );

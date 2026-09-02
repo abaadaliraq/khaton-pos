@@ -1,6 +1,7 @@
 import clsx from "clsx";
-import { AlertTriangle, ChefHat, CheckCircle2, Clock, Send } from "lucide-react";
+import { AlertTriangle, ChefHat, CheckCircle2, Clock } from "lucide-react";
 import { kitchenStatusLabels } from "@/config/kitchen";
+import { formatOrderLabel } from "@/lib/displayFormat";
 import { formatElapsedTime, formatKitchenClock } from "@/lib/formatElapsedTime";
 import { isKitchenOrderLate } from "@/lib/kitchenOrders";
 import { KitchenOrderItems } from "@/components/kitchen/KitchenOrderItems";
@@ -22,9 +23,7 @@ export function KitchenOrderCard({ order, now, onStatusChange, onOpenDetails }: 
       ? { label: "بدء التحضير", next: "preparing" as const, icon: ChefHat }
       : order.status === "preparing"
         ? { label: "الطلب جاهز", next: "ready" as const, icon: CheckCircle2 }
-        : order.status === "ready"
-          ? { label: "تم التسليم", next: "served" as const, icon: Send }
-          : null;
+        : null;
 
   return (
     <article
@@ -36,8 +35,13 @@ export function KitchenOrderCard({ order, now, onStatusChange, onOpenDetails }: 
       <button type="button" onClick={() => onOpenDetails(order)} className="w-full text-right">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm text-[#C9BEB2]">طلب {order.id}</p>
+            <p className="text-sm text-[#C9BEB2]">{formatOrderLabel(order.orderNumber)}</p>
             <h3 className="text-3xl font-semibold text-[#FFF8EE]">طاولة {order.tableId}</h3>
+            {order.roundNo > 1 ? (
+              <span className="mt-2 inline-flex rounded-full bg-[#B94B43] px-3 py-1 text-sm font-bold text-white">
+                إضافة #{order.roundNo}
+              </span>
+            ) : null}
           </div>
           <div className="flex flex-col items-end gap-2">
             <span className="rounded-full bg-[#302B27] px-3 py-1 text-sm text-[#FFF8EE]">{kitchenStatusLabels[order.status]}</span>

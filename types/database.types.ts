@@ -102,6 +102,8 @@ export type Database = {
           id: string;
           order_number: number;
           table_id: string;
+          table_session_id: string | null;
+          round_no: number | null;
           captain_id: string;
           status: "draft" | "submitted" | "preparing" | "ready" | "served" | "awaiting_payment" | "paid" | "cancelled";
           guest_count: number | null;
@@ -121,6 +123,8 @@ export type Database = {
         Insert: {
           id?: string;
           table_id: string;
+          table_session_id?: string | null;
+          round_no?: number | null;
           captain_id: string;
           status?: Database["public"]["Tables"]["orders"]["Row"]["status"];
           guest_count?: number | null;
@@ -138,6 +142,27 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["orders"]["Insert"]>;
+      };
+      table_sessions: {
+        Row: {
+          id: string;
+          table_id: string;
+          captain_id: string;
+          status: "active" | "closed";
+          opened_at: string;
+          closed_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          table_id: string;
+          captain_id: string;
+          status?: "active" | "closed";
+          opened_at?: string;
+          closed_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["table_sessions"]["Insert"]>;
       };
       order_items: {
         Row: {
@@ -198,6 +223,76 @@ export type Database = {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["payments"]["Insert"]>;
+      };
+      cash_shifts: {
+        Row: {
+          id: string;
+          cashier_id: string;
+          business_date: string;
+          opened_at: string;
+          closed_at: string | null;
+          opening_cash: number;
+          counted_cash: number | null;
+          expected_cash_snapshot: number | null;
+          cash_difference: number | null;
+          status: "open" | "closed";
+          opening_note: string | null;
+          closing_note: string | null;
+          opened_by: string;
+          closed_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          cashier_id: string;
+          business_date?: string;
+          opened_at?: string;
+          closed_at?: string | null;
+          opening_cash: number;
+          counted_cash?: number | null;
+          expected_cash_snapshot?: number | null;
+          cash_difference?: number | null;
+          status?: "open" | "closed";
+          opening_note?: string | null;
+          closing_note?: string | null;
+          opened_by: string;
+          closed_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cash_shifts"]["Insert"]>;
+      };
+      cash_movements: {
+        Row: {
+          id: string;
+          shift_id: string;
+          direction: "in" | "out";
+          movement_type: "customer_payment" | "expense" | "supplier_payment" | "manual_cash_in" | "manual_cash_out";
+          event_type: "original" | "reversal" | "refund";
+          amount: number;
+          source_type: "payment" | "expense" | "purchase_payment" | "manual";
+          source_id: string | null;
+          description: string | null;
+          created_by: string;
+          created_at: string;
+          voided_at: string | null;
+          voided_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          shift_id: string;
+          direction: "in" | "out";
+          movement_type: "customer_payment" | "expense" | "supplier_payment" | "manual_cash_in" | "manual_cash_out";
+          event_type?: "original" | "reversal" | "refund";
+          amount: number;
+          source_type: "payment" | "expense" | "purchase_payment" | "manual";
+          source_id?: string | null;
+          description?: string | null;
+          created_by: string;
+          created_at?: string;
+          voided_at?: string | null;
+          voided_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["cash_movements"]["Insert"]>;
       };
       order_status_events: {
         Row: {
@@ -408,6 +503,19 @@ export type Database = {
     Views: Record<string, never>;
     Functions: {
       current_user_role: { Args: Record<string, never>; Returns: string | null };
+      calculate_cash_shift_expected: {
+        Args: { p_shift_id: string; p_cutoff_at?: string | null };
+        Returns: Json;
+      };
+      get_current_expected_cash: { Args: Record<string, never>; Returns: Json };
+      open_cash_shift: {
+        Args: { p_opening_cash: number; p_opening_note?: string | null };
+        Returns: Database["public"]["Tables"]["cash_shifts"]["Row"];
+      };
+      close_cash_shift: {
+        Args: { p_counted_cash: number; p_closing_note?: string | null };
+        Returns: Json;
+      };
       create_staff_member: {
         Args: {
           p_full_name: string;
@@ -476,9 +584,11 @@ export type Database = {
         Args: { p_table_id: string; p_items: Json; p_guest_count?: number | null; p_general_notes?: string | null };
         Returns: Json;
       };
+      mark_order_awaiting_payment_by_captain: { Args: { p_order_id: string }; Returns: Json };
       update_kitchen_order_status: { Args: { p_order_id: string; p_next_status: string }; Returns: Json };
       get_kitchen_order_queue: { Args: Record<string, never>; Returns: Json };
       record_order_payment: { Args: { p_order_id: string; p_payments: Json }; Returns: Json };
+      record_table_payment: { Args: { p_table_session_id: string; p_payments: Json }; Returns: Json };
       apply_order_discount: { Args: { p_order_id: string; p_discount_amount: number; p_reason: string }; Returns: Json };
       close_paid_table: { Args: { p_order_id: string }; Returns: Json };
     };

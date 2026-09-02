@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimePostgresInsertPayload } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { formatOrderLabel } from "@/lib/displayFormat";
 import type { Database } from "@/types/database.types";
 import type { OperationalToastState } from "@/components/operational/OperationalToast";
 
@@ -12,7 +13,7 @@ type OrderStatusEventRow = Database["public"]["Tables"]["order_status_events"]["
 
 type UseOperationalNotificationsOptions = {
   role: OperationalRole;
-  onRelevantEvent?: (event: { type: OperationalEventType; orderId: string }) => void;
+  onRelevantEvent?: (event: { type: OperationalEventType; orderId: string; tableSessionId: string | null; roundNo: number | null }) => void;
 };
 
 const soundPreferenceKey = "khatoun-operational-sound-enabled";
@@ -32,21 +33,29 @@ function isRelevantStatusEvent(row: OrderStatusEventRow): OperationalEventType |
   return null;
 }
 
-function notificationText(type: OperationalEventType, tableLabel: string): OperationalToastState {
+type OrderNotificationInfo = {
+  tableLabel: string;
+  tableSessionId: string | null;
+  roundNo: number | null;
+};
+
+function notificationText(type: OperationalEventType, info: OrderNotificationInfo): OperationalToastState {
+  const isAdditionalOrder = type === "new-order" && typeof info.roundNo === "number" && info.roundNo > 1;
+
   if (type === "new-order") {
     return {
-      id: `${type}:${tableLabel}:${Date.now()}`,
-      title: "طلب جديد",
-      tableLabel,
-      message: "تم استلام طلب جديد",
+      id: `${type}:${info.tableLabel}:${Date.now()}`,
+      title: isAdditionalOrder ? "طلب إضافي جديد" : "طلب جديد",
+      tableLabel: info.tableLabel,
+      message: isAdditionalOrder ? `${info.tableLabel} أضافت طلباً جديداً - إضافة #${info.roundNo}` : "تم استلام طلب جديد",
       tone: "new",
     };
   }
 
   return {
-    id: `${type}:${tableLabel}:${Date.now()}`,
+    id: `${type}:${info.tableLabel}:${Date.now()}`,
     title: "الطلب جاهز",
-    tableLabel,
+    tableLabel: info.tableLabel,
     message: "أصبح الطلب جاهزاً للتقديم",
     tone: "ready",
   };
@@ -154,26 +163,35 @@ export function useOperationalNotifications({ role, onRelevantEvent }: UseOperat
     [isAudioUnlocked, soundEnabled],
   );
 
-  const resolveTableLabel = useCallback(async (orderId: string) => {
+  const resolveOrderNotificationInfo = useCallback(async (orderId: string): Promise<OrderNotificationInfo> => {
     const supabase = createClient();
     const { data } = await supabase
       .from("orders")
-      .select("order_number, table:restaurant_tables(table_number)")
+      .select("order_number, table_session_id, round_no, table:restaurant_tables(table_number)")
       .eq("id", orderId)
       .maybeSingle();
 
-    const row = data as unknown as { order_number: number | null; table: { table_number: number | null } | null } | null;
+    const row = data as unknown as {
+      order_number: number | null;
+      table_session_id: string | null;
+      round_no: number | null;
+      table: { table_number: number | null } | null;
+    } | null;
     const tableNumber = row?.table?.table_number;
+    const tableLabel = typeof tableNumber === "number" ? `طاولة ${tableNumber}` : typeof row?.order_number === "number" ? formatOrderLabel(row.order_number) : "طلب جديد";
 
-    if (typeof tableNumber === "number") return `طاولة ${tableNumber}`;
-    if (typeof row?.order_number === "number") return `طلب ${row.order_number}`;
-    return "طلب جديد";
+    return {
+      tableLabel,
+      tableSessionId: row?.table_session_id ?? null,
+      roundNo: row?.round_no ?? null,
+    };
   }, []);
 
   const emitNotification = useCallback(
     async (type: OperationalEventType, orderId: string) => {
-      const tableLabel = await resolveTableLabel(orderId);
-      const nextToast = notificationText(type, tableLabel);
+      const info = await resolveOrderNotificationInfo(orderId);
+      onRelevantEventRef.current?.({ type, orderId, tableSessionId: info.tableSessionId, roundNo: info.roundNo });
+      const nextToast = notificationText(type, info);
       setToast(nextToast);
 
       if (toastTimerRef.current) {
@@ -183,7 +201,7 @@ export function useOperationalNotifications({ role, onRelevantEvent }: UseOperat
       toastTimerRef.current = window.setTimeout(() => setToast(null), 4200);
       playSound(type);
     },
-    [playSound, resolveTableLabel],
+    [playSound, resolveOrderNotificationInfo],
   );
 
   const handleStatusEvent = useCallback(
@@ -196,7 +214,6 @@ export function useOperationalNotifications({ role, onRelevantEvent }: UseOperat
 
       handledEventsRef.current.add(dedupeKey);
       markEventHandled(dedupeKey);
-      onRelevantEventRef.current?.({ type, orderId: row.order_id });
       void emitNotification(type, row.order_id);
     },
     [emitNotification, role],

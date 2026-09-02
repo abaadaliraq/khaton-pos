@@ -23,13 +23,17 @@ export function SendOrderDialog({
     return null;
   }
 
+  const isAdditionalOrder = selectedTable?.status === "occupied";
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
       <div className="captain-card w-full max-w-md p-4 shadow-xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="captain-accent" size={22} />
-            <h2 className="captain-heading text-lg font-bold">تأكيد إرسال الطلب</h2>
+            <h2 className="captain-heading text-lg font-bold">
+              {isAdditionalOrder ? "تأكيد إرسال طلب إضافي" : "تأكيد إرسال الطلب"}
+            </h2>
           </div>
           <button
             type="button"
@@ -46,6 +50,12 @@ export function SendOrderDialog({
             <span className="captain-muted">الطاولة</span>
             <span className="captain-heading font-bold">{selectedTable ? selectedTable.id : "-"}</span>
           </div>
+          {isAdditionalOrder ? (
+            <div className="flex justify-between">
+              <span className="captain-muted">النوع</span>
+              <span className="captain-accent font-bold">طلب إضافي</span>
+            </div>
+          ) : null}
           <div className="flex justify-between">
             <span className="captain-muted">عدد الأصناف</span>
             <span className="captain-heading font-bold">{itemCount}</span>

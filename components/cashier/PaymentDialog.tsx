@@ -9,8 +9,9 @@ import type { CashierOrder, PaymentMethod, PaymentRecord } from "@/types/cashier
 type PaymentDialogProps = {
   order: CashierOrder | null;
   isOpen: boolean;
+  isSubmitting: boolean;
   onClose: () => void;
-  onConfirm: (payment: PaymentRecord) => void;
+  onConfirm: (payment: PaymentRecord) => Promise<boolean>;
 };
 
 const methods: { id: PaymentMethod; label: string }[] = [
@@ -20,7 +21,7 @@ const methods: { id: PaymentMethod; label: string }[] = [
   { id: "mixed", label: "دفع مختلط" },
 ];
 
-export function PaymentDialog({ order, isOpen, onClose, onConfirm }: PaymentDialogProps) {
+export function PaymentDialog({ order, isOpen, isSubmitting, onClose, onConfirm }: PaymentDialogProps) {
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [cashAmount, setCashAmount] = useState("");
   const [cardAmount, setCardAmount] = useState("");
@@ -50,8 +51,10 @@ export function PaymentDialog({ order, isOpen, onClose, onConfirm }: PaymentDial
     onClose();
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmitting) return;
+
     setError("");
 
     if (method === "cash" && (!Number.isFinite(cash) || cash < remaining)) {
@@ -69,7 +72,7 @@ export function PaymentDialog({ order, isOpen, onClose, onConfirm }: PaymentDial
       return;
     }
 
-    onConfirm({
+    const didRecordPayment = await onConfirm({
       id: `PAY-${Date.now()}`,
       method,
       amount: remaining,
@@ -78,7 +81,10 @@ export function PaymentDialog({ order, isOpen, onClose, onConfirm }: PaymentDial
       reference: reference.trim() || undefined,
       createdAt: new Intl.DateTimeFormat("ar-IQ", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()),
     });
-    resetAndClose();
+
+    if (didRecordPayment) {
+      resetAndClose();
+    }
   }
 
   return (
@@ -107,6 +113,7 @@ export function PaymentDialog({ order, isOpen, onClose, onConfirm }: PaymentDial
               key={paymentMethod.id}
               type="button"
               onClick={() => setMethod(paymentMethod.id)}
+              disabled={isSubmitting}
               className={`h-10 rounded-lg border text-sm ${method === paymentMethod.id ? "border-[#B85F4A] bg-[#B85F4A] text-white" : "border-[#d8c9b7]"}`}
             >
               {paymentMethod.label}
@@ -117,9 +124,10 @@ export function PaymentDialog({ order, isOpen, onClose, onConfirm }: PaymentDial
         {method === "cash" ? (
           <div className="mt-3">
             <input
-              value={cashAmount}
-              onChange={(event) => setCashAmount(event.target.value)}
-              inputMode="numeric"
+            value={cashAmount}
+            onChange={(event) => setCashAmount(event.target.value)}
+            disabled={isSubmitting}
+            inputMode="numeric"
               className="h-11 w-full rounded-lg border border-[#d8c9b7] bg-[#F7F1E8] px-3 outline-none focus:border-[#B85F4A] focus:bg-white"
               placeholder="المبلغ المستلم"
             />
@@ -129,25 +137,26 @@ export function PaymentDialog({ order, isOpen, onClose, onConfirm }: PaymentDial
 
         {method === "card" || method === "transfer" ? (
           <input
-            value={reference}
-            onChange={(event) => setReference(event.target.value)}
-            className="mt-3 h-11 w-full rounded-lg border border-[#d8c9b7] bg-[#F7F1E8] px-3 outline-none focus:border-[#B85F4A] focus:bg-white"
+          value={reference}
+          onChange={(event) => setReference(event.target.value)}
+          disabled={isSubmitting}
+          className="mt-3 h-11 w-full rounded-lg border border-[#d8c9b7] bg-[#F7F1E8] px-3 outline-none focus:border-[#B85F4A] focus:bg-white"
             placeholder="مرجع اختياري"
           />
         ) : null}
 
         {method === "mixed" ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            <input value={cashAmount} onChange={(event) => setCashAmount(event.target.value)} inputMode="numeric" className="h-11 rounded-lg border border-[#d8c9b7] bg-[#F7F1E8] px-3 outline-none" placeholder="مبلغ نقدي" />
-            <input value={cardAmount} onChange={(event) => setCardAmount(event.target.value)} inputMode="numeric" className="h-11 rounded-lg border border-[#d8c9b7] bg-[#F7F1E8] px-3 outline-none" placeholder="مبلغ بطاقة" />
-            <input value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} inputMode="numeric" className="h-11 rounded-lg border border-[#d8c9b7] bg-[#F7F1E8] px-3 outline-none" placeholder="مبلغ تحويل" />
+            <input value={cashAmount} onChange={(event) => setCashAmount(event.target.value)} disabled={isSubmitting} inputMode="numeric" className="h-11 rounded-lg border border-[#d8c9b7] bg-[#F7F1E8] px-3 outline-none" placeholder="مبلغ نقدي" />
+            <input value={cardAmount} onChange={(event) => setCardAmount(event.target.value)} disabled={isSubmitting} inputMode="numeric" className="h-11 rounded-lg border border-[#d8c9b7] bg-[#F7F1E8] px-3 outline-none" placeholder="مبلغ بطاقة" />
+            <input value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} disabled={isSubmitting} inputMode="numeric" className="h-11 rounded-lg border border-[#d8c9b7] bg-[#F7F1E8] px-3 outline-none" placeholder="مبلغ تحويل" />
           </div>
         ) : null}
 
         {error ? <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-[#7B3F32]">{error}</p> : null}
 
-        <button type="submit" className="mt-4 h-11 w-full rounded-lg bg-[#B85F4A] font-semibold text-white hover:bg-[#7B3F32]">
-          تأكيد الدفع
+        <button type="submit" disabled={isSubmitting} className="mt-4 h-11 w-full rounded-lg bg-[#B85F4A] font-semibold text-white hover:bg-[#7B3F32] disabled:bg-stone-300">
+          {isSubmitting ? "جارٍ تسجيل الدفع..." : "تأكيد الدفع"}
         </button>
       </form>
     </div>

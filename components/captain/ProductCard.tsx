@@ -5,10 +5,12 @@ import type { MenuItem } from "@/types/pos";
 type ProductCardProps = {
   item: MenuItem;
   onAdd: (item: MenuItem) => void;
+  isDisabled: boolean;
 };
 
-export function ProductCard({ item, onAdd }: ProductCardProps) {
+export function ProductCard({ item, onAdd, isDisabled }: ProductCardProps) {
   const isPriced = item.price > 0;
+  const canAdd = isPriced && !isDisabled;
 
   return (
     <article className="captain-product-card flex min-h-40 flex-col justify-between p-4">
@@ -23,7 +25,7 @@ export function ProductCard({ item, onAdd }: ProductCardProps) {
         <button
           type="button"
           onClick={() => onAdd(item)}
-          disabled={!isPriced}
+          disabled={!canAdd}
           className="captain-primary-button inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold"
         >
           <Plus size={17} />

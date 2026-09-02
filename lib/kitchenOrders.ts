@@ -1,4 +1,5 @@
 import { lateOrderMinutes } from "@/config/kitchen";
+import { getTimestamp } from "@/lib/displayFormat";
 import type { KitchenFilter, KitchenOrder, KitchenOrderSeed, KitchenOrderStatus } from "@/types/kitchen";
 
 function minutesAgo(minutes: number, now: number) {
@@ -8,6 +9,8 @@ function minutesAgo(minutes: number, now: number) {
 export function createKitchenOrdersFromSeeds(seeds: KitchenOrderSeed[], now = Date.now()): KitchenOrder[] {
   return seeds.map((seed) => ({
     id: seed.id,
+    orderNumber: seed.orderNumber,
+    roundNo: seed.roundNo ?? 1,
     tableId: seed.tableId,
     captainName: seed.captainName,
     status: seed.status,
@@ -27,7 +30,12 @@ export function isKitchenOrderLate(order: KitchenOrder, now = Date.now()) {
     return false;
   }
 
-  const minutes = Math.floor((now - new Date(order.timing.receivedAt).getTime()) / 60000);
+  const receivedAt = getTimestamp(order.timing.receivedAt);
+  if (receivedAt === null) {
+    return false;
+  }
+
+  const minutes = Math.floor((now - receivedAt) / 60000);
   return minutes >= lateOrderMinutes;
 }
 
@@ -52,6 +60,7 @@ export function matchesKitchenSearch(order: KitchenOrder, searchTerm: string) {
 
   return (
     String(order.tableId).includes(normalized) ||
+    String(order.orderNumber).includes(normalized) ||
     order.id.toLowerCase().includes(normalized) ||
     order.captainName.toLowerCase().includes(normalized) ||
     order.items.some((item) => item.name.toLowerCase().includes(normalized))
@@ -83,12 +92,12 @@ export function updateKitchenOrderStatus(
 }
 
 export function getPreparationMinutes(order: KitchenOrder) {
-  if (!order.timing.startedAt || !order.timing.readyAt) {
+  const startedAt = getTimestamp(order.timing.startedAt);
+  const readyAt = getTimestamp(order.timing.readyAt);
+
+  if (startedAt === null || readyAt === null) {
     return null;
   }
 
-  return Math.max(
-    0,
-    Math.round((new Date(order.timing.readyAt).getTime() - new Date(order.timing.startedAt).getTime()) / 60000),
-  );
+  return Math.max(0, Math.round((readyAt - startedAt) / 60000));
 }

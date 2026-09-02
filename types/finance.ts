@@ -181,6 +181,81 @@ export type PurchaseSummary = {
   latestPurchaseNumber: number | null;
 };
 
+export type CustomerPayment = {
+  id: string;
+  orderId: string;
+  orderNumber: number | null;
+  tableNumber: number | null;
+  amount: number;
+  method: ExpensePaymentMethod;
+  status: "completed" | "voided";
+  createdAt: string;
+};
+
+export type FinanceOpenOrdersSummary = {
+  count: number;
+  total: number;
+};
+
+export type FinanceSalesSummary = {
+  salesToday: number;
+  receivedToday: number;
+  openOrders: FinanceOpenOrdersSummary;
+  customerPaymentsToday: CustomerPayment[];
+};
+
+export type CashShiftStatus = "open" | "closed";
+
+export type CashShift = {
+  id: string;
+  cashierId: string;
+  businessDate: string;
+  openedAt: string;
+  closedAt: string | null;
+  openingCash: number;
+  countedCash: number | null;
+  expectedCashSnapshot: number | null;
+  cashDifference: number | null;
+  status: CashShiftStatus;
+  openingNote: string | null;
+  closingNote: string | null;
+  openedBy: string;
+  closedBy: string | null;
+  createdAt: string;
+};
+
+export type OpenCashShiftInput = {
+  openingCash: number;
+  openingNote?: string;
+};
+
+export type CloseCashShiftInput = {
+  countedCash: number;
+  closingNote?: string;
+};
+
+export type ExpectedCashBreakdown = {
+  shiftId: string;
+  businessDate: string;
+  openedAt: string;
+  cutoffAt: string;
+  openingCash: number;
+  cashSales: number;
+  cashExpenses: number;
+  cashSupplierPayments: number;
+  expectedCash: number;
+  sources: {
+    cashSalesAvailable: boolean;
+    cashExpensesAvailable: boolean;
+    cashSupplierPaymentsAvailable: boolean;
+  };
+};
+
+export type CashShiftSummary = {
+  shift: CashShift;
+  expected: ExpectedCashBreakdown;
+};
+
 export const expenseCategoryLabels: Record<ExpenseCategory, string> = {
   electricity: "كهرباء",
   water: "ماء",

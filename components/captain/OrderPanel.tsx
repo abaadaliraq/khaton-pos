@@ -9,6 +9,7 @@ type OrderPanelProps = {
   selectedTable: RestaurantTable | null;
   subtotal: number;
   itemCount: number;
+  isSendingOrder: boolean;
   isMobileOpen: boolean;
   noteItemId: string | null;
   onMobileOpen: () => void;
@@ -32,16 +33,19 @@ function PanelContent({
   onToggleNote,
   onNoteChange,
   onSend,
+  isSendingOrder,
 }: Omit<OrderPanelProps, "itemCount" | "isMobileOpen" | "onMobileOpen" | "onMobileClose">) {
-  const canSend = Boolean(selectedTable) && orderItems.length > 0;
+  const canSend = Boolean(selectedTable) && orderItems.length > 0 && !isSendingOrder;
+  const isAdditionalOrder = selectedTable?.status === "occupied";
 
   return (
     <div className="flex h-full flex-col">
       <div className="captain-divider border-b pb-3">
-        <p className="captain-muted text-xs">سلة الطلب</p>
+        <p className="captain-muted text-xs">03 الطلب</p>
         <h2 className="captain-heading text-xl font-bold">
           {selectedTable ? `طاولة ${selectedTable.id}` : "لم تختر طاولة"}
         </h2>
+        {isAdditionalOrder ? <p className="captain-accent mt-1 text-sm font-bold">طلب إضافي</p> : null}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto py-3">
@@ -76,7 +80,7 @@ function PanelContent({
           onClick={onSend}
           className="captain-primary-button h-12 w-full text-sm font-bold"
         >
-          إرسال الطلب
+          {isSendingOrder ? "جارٍ الإرسال..." : isAdditionalOrder ? "إرسال الطلب الإضافي" : "إرسال الطلب"}
         </button>
       </div>
     </div>

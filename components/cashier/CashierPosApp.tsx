@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AddOrderDialog } from "@/components/cashier/AddOrderDialog";
 import { BillPanel } from "@/components/cashier/BillPanel";
 import { CashierFilters, type CashierFilter } from "@/components/cashier/CashierFilters";
 import { CashierHeader } from "@/components/cashier/CashierHeader";
@@ -15,18 +16,46 @@ import { TablesGrid } from "@/components/cashier/TablesGrid";
 import { OperationalToast } from "@/components/operational/OperationalToast";
 import { useOperationalNotifications } from "@/components/operational/useOperationalNotifications";
 import { getBillTotals, getShiftSummary } from "@/lib/cashierCalculations";
+import { getSupabaseErrorInfo } from "@/lib/supabaseError";
 import { createClient } from "@/lib/supabase/client";
 import { getCashierTables } from "@/services/cashierService";
-import { applyOrderDiscount, closePaidTable, recordOrderPayment } from "@/services/paymentService";
+import { getMenuCatalog } from "@/services/menuService";
+import { createRestaurantOrder } from "@/services/orderService";
+import { applyOrderDiscount, closePaidTable, recordTablePayment } from "@/services/paymentService";
 import type { UserSession } from "@/types/auth";
 import type { CashierOrder, CashierTable, DiscountData, PaymentRecord } from "@/types/cashier";
+import type { MenuItem, OrderItem } from "@/types/pos";
 
 type CashierPosAppProps = {
   session: UserSession;
 };
 
+const unreadAdditionsStorageKey = "khatoun-cashier-unread-additional-orders";
+
+function loadUnreadAdditionIds() {
+  if (typeof window === "undefined") {
+    return new Set<string>();
+  }
+
+  try {
+    const storedIds = JSON.parse(window.sessionStorage.getItem(unreadAdditionsStorageKey) ?? "[]");
+    return new Set(Array.isArray(storedIds) ? storedIds.filter((id): id is string => typeof id === "string") : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function persistUnreadAdditionIds(ids: Set<string>) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.setItem(unreadAdditionsStorageKey, JSON.stringify([...ids]));
+}
+
 export function CashierPosApp({ session }: CashierPosAppProps) {
   const [tables, setTables] = useState<CashierTable[]>([]);
+  const [unreadAdditionIds, setUnreadAdditionIds] = useState<Set<string>>(() => loadUnreadAdditionIds());
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFilter, setActiveFilter] = useState<CashierFilter>("all");
@@ -37,9 +66,30 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
   const [isShiftOpen, setIsShiftOpen] = useState(false);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isCloseTableOpen, setIsCloseTableOpen] = useState(false);
+  const [isAddOrderOpen, setIsAddOrderOpen] = useState(false);
   const [printOrder, setPrintOrder] = useState<CashierOrder | null>(null);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [addOrderSearchTerm, setAddOrderSearchTerm] = useState("");
+  const [addOrderItems, setAddOrderItems] = useState<OrderItem[]>([]);
+  const [isSendingAdditionalOrder, setIsSendingAdditionalOrder] = useState(false);
+  const [paymentSubmittingOrderId, setPaymentSubmittingOrderId] = useState<string | null>(null);
   const realtimeReloadTimerRef = useRef<number | null>(null);
-  const notifications = useOperationalNotifications({ role: "cashier" });
+  const paymentSubmittingOrderRef = useRef<string | null>(null);
+  const notifications = useOperationalNotifications({
+    role: "cashier",
+    onRelevantEvent: (event) => {
+      if (event.type !== "new-order" || !event.roundNo || event.roundNo <= 1) {
+        return;
+      }
+
+      setUnreadAdditionIds((currentIds) => {
+        const nextIds = new Set(currentIds);
+        nextIds.add(event.orderId);
+        persistUnreadAdditionIds(nextIds);
+        return nextIds;
+      });
+    },
+  });
 
   function showMessage(nextMessage: string) {
     setMessage(nextMessage);
@@ -62,13 +112,14 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
 
     async function loadData() {
       try {
-        const nextTables = await getCashierTables();
+        const [nextTables, catalog] = await Promise.all([getCashierTables(), getMenuCatalog()]);
 
         if (!isMounted) {
           return;
         }
 
         setTables(nextTables);
+        setMenuItems(catalog.menuItems);
         setSelectedTableId(nextTables.find((table) => table.order)?.id ?? nextTables[0]?.id ?? null);
       } catch (error) {
         console.error("Failed to load cashier data", error);
@@ -136,17 +187,58 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
     };
   }, [reloadTables]);
 
+  const tablesWithUnreadAdditions = useMemo(
+    () =>
+      tables.map((table) => {
+        if (!table.order?.rounds?.length) {
+          return table;
+        }
+
+        const rounds = table.order.rounds.map((round) => ({
+          ...round,
+          isNewAddition: round.roundNo > 1 && unreadAdditionIds.has(round.id),
+        }));
+
+        return {
+          ...table,
+          order: {
+            ...table.order,
+            rounds,
+          },
+          orders: table.orders?.map((order) => ({
+            ...order,
+            isNewAddition: order.roundNo > 1 && unreadAdditionIds.has(order.id),
+          })),
+          unpaidOrders: table.unpaidOrders?.map((order) => ({
+            ...order,
+            isNewAddition: order.roundNo > 1 && unreadAdditionIds.has(order.id),
+          })),
+          paidOrders: table.paidOrders?.map((order) => ({
+            ...order,
+            isNewAddition: order.roundNo > 1 && unreadAdditionIds.has(order.id),
+          })),
+        };
+      }),
+    [tables, unreadAdditionIds],
+  );
+
   const selectedTable = useMemo(
-    () => tables.find((table) => table.id === selectedTableId) ?? null,
-    [selectedTableId, tables],
+    () => tablesWithUnreadAdditions.find((table) => table.id === selectedTableId) ?? null,
+    [selectedTableId, tablesWithUnreadAdditions],
   );
 
   const selectedOrder = selectedTable?.order ?? null;
 
+  const filteredAddOrderItems = useMemo(() => {
+    const normalizedSearch = addOrderSearchTerm.trim().toLowerCase();
+
+    return menuItems.filter((item) => normalizedSearch.length === 0 || item.name.toLowerCase().includes(normalizedSearch) || item.description?.toLowerCase().includes(normalizedSearch));
+  }, [addOrderSearchTerm, menuItems]);
+
   const filteredTables = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
-    return tables.filter((table) => {
+    return tablesWithUnreadAdditions.filter((table) => {
       const filterMatches = activeFilter === "all" || table.status === activeFilter;
       const searchMatches =
         normalizedSearch.length === 0 ||
@@ -155,11 +247,11 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
 
       return filterMatches && searchMatches;
     });
-  }, [activeFilter, searchTerm, tables]);
+  }, [activeFilter, searchTerm, tablesWithUnreadAdditions]);
 
   const stats = useMemo(() => {
-    const summary = getShiftSummary(tables);
-    const unpaid = tables.reduce((total, table) => {
+    const summary = getShiftSummary(tablesWithUnreadAdditions);
+    const unpaid = tablesWithUnreadAdditions.reduce((total, table) => {
       if (!table.order || table.status === "paid") {
         return total;
       }
@@ -174,7 +266,7 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
       unpaid,
       summary,
     };
-  }, [tables]);
+  }, [tablesWithUnreadAdditions]);
 
   function selectTable(table: CashierTable) {
     if (!table.order) {
@@ -183,6 +275,17 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
     }
 
     setSelectedTableId(table.id);
+    const unreadRoundIds = table.order.rounds?.filter((round) => round.isNewAddition).map((round) => round.id) ?? [];
+
+    if (unreadRoundIds.length > 0) {
+      setUnreadAdditionIds((currentIds) => {
+        const nextIds = new Set(currentIds);
+        unreadRoundIds.forEach((id) => nextIds.delete(id));
+        persistUnreadAdditionIds(nextIds);
+        return nextIds;
+      });
+    }
+
     setIsBillSheetOpen(true);
   }
 
@@ -221,16 +324,29 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
 
   async function confirmPayment(payment: PaymentRecord) {
     if (!selectedOrder) {
-      return;
+      showMessage("اختر طلباً مفتوحاً قبل تسجيل الدفع.");
+      return false;
     }
 
     if (payment.method === "mixed") {
       showMessage("الدفع المختلط يحتاج تمرير تفاصيل كل وسيلة دفع.");
-      return;
+      return false;
     }
 
+    if (selectedTable?.billingStatus !== "payable") {
+      showMessage("لا يمكن تسجيل الدفع لأن الطلب ليس جاهزاً للدفع.");
+      return false;
+    }
+
+    if (paymentSubmittingOrderRef.current === selectedOrder.id) {
+      return false;
+    }
+
+    paymentSubmittingOrderRef.current = selectedOrder.id;
+    setPaymentSubmittingOrderId(selectedOrder.id);
+
     try {
-      await recordOrderPayment(selectedOrder.id, [
+      await recordTablePayment(selectedOrder.tableSessionId, [
         {
           method: payment.method,
           amount: payment.amount,
@@ -239,9 +355,93 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
       ]);
       await reloadTables();
       showMessage("تم تسجيل الدفع بنجاح");
+      return true;
     } catch (error) {
-      console.error("Failed to record payment", error);
-      showMessage("تعذر تسجيل الدفع في Supabase.");
+      if (process.env.NODE_ENV === "development") {
+        const totals = getBillTotals(selectedOrder);
+        const info = getSupabaseErrorInfo(error);
+        console.warn("Payment failed", {
+          orderId: selectedOrder.id,
+          tableId: selectedOrder.tableId,
+          status: selectedOrder.rawStatus,
+          totalAmount: totals.total,
+          remainingAmount: totals.remainingAmount,
+          paymentAmount: payment.amount,
+          paymentMethod: payment.method,
+          message: info.message,
+          code: info.code,
+          details: info.details,
+          hint: info.hint,
+          raw: error,
+        });
+      }
+
+      showMessage("تعذر تسجيل الدفع. لم يتم إجراء أي تغيير.");
+      return false;
+    } finally {
+      paymentSubmittingOrderRef.current = null;
+      setPaymentSubmittingOrderId(null);
+    }
+  }
+
+  function resetAddOrder() {
+    setAddOrderItems([]);
+    setAddOrderSearchTerm("");
+    setIsAddOrderOpen(false);
+  }
+
+  function addAdditionalItem(item: MenuItem) {
+    if (item.price <= 0) {
+      return;
+    }
+
+    setAddOrderItems((currentItems) => {
+      const existingItem = currentItems.find((orderItem) => orderItem.item.id === item.id);
+
+      if (existingItem) {
+        return currentItems.map((orderItem) =>
+          orderItem.item.id === item.id ? { ...orderItem, quantity: orderItem.quantity + 1 } : orderItem,
+        );
+      }
+
+      return [...currentItems, { item, quantity: 1, note: "" }];
+    });
+  }
+
+  function updateAdditionalQuantity(itemId: string, direction: "increase" | "decrease") {
+    setAddOrderItems((currentItems) =>
+      currentItems.map((orderItem) =>
+        orderItem.item.id === itemId
+          ? { ...orderItem, quantity: direction === "increase" ? orderItem.quantity + 1 : Math.max(1, orderItem.quantity - 1) }
+          : orderItem,
+      ),
+    );
+  }
+
+  async function submitAdditionalOrder() {
+    if (!selectedTable?.databaseId || selectedTable.status === "available" || !addOrderItems.length || isSendingAdditionalOrder) {
+      return;
+    }
+
+    setIsSendingAdditionalOrder(true);
+
+    try {
+      await createRestaurantOrder({
+        table: {
+          id: selectedTable.id,
+          databaseId: selectedTable.databaseId,
+          status: "occupied",
+        },
+        items: addOrderItems,
+      });
+      await reloadTables();
+      resetAddOrder();
+      showMessage("تم إرسال الطلب الإضافي للمطبخ");
+    } catch (error) {
+      console.error("Failed to create additional order", error);
+      showMessage("تعذر إرسال الطلب الإضافي إلى Supabase.");
+    } finally {
+      setIsSendingAdditionalOrder(false);
     }
   }
 
@@ -313,7 +513,9 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
           onRemoveDiscount={removeDiscount}
           onOpenPayment={() => setIsPaymentOpen(true)}
           onPrint={printReceipt}
+          onOpenAddOrder={() => setIsAddOrderOpen(true)}
           onOpenCloseTable={() => setIsCloseTableOpen(true)}
+          isPaymentSubmitting={paymentSubmittingOrderId === selectedOrder?.id}
         />
       </main>
 
@@ -325,11 +527,32 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
       <OperationalToast toast={notifications.toast} />
 
       <DiscountDialog order={selectedOrder} isOpen={isDiscountOpen} onClose={() => setIsDiscountOpen(false)} onApply={applyDiscount} />
-      <PaymentDialog order={selectedOrder} isOpen={isPaymentOpen} onClose={() => setIsPaymentOpen(false)} onConfirm={confirmPayment} />
+      <PaymentDialog
+        order={selectedOrder}
+        isOpen={isPaymentOpen}
+        isSubmitting={paymentSubmittingOrderId === selectedOrder?.id}
+        onClose={() => setIsPaymentOpen(false)}
+        onConfirm={confirmPayment}
+      />
       <ShiftSummaryDialog isOpen={isShiftOpen} summary={stats.summary} onClose={() => setIsShiftOpen(false)} />
       <OrderDetailsDialog order={selectedOrder} isOpen={isDetailsOpen} onClose={() => setIsDetailsOpen(false)} />
       <CloseTableDialog isOpen={isCloseTableOpen} onClose={() => setIsCloseTableOpen(false)} onConfirm={closeTable} />
       <PrintReceipt order={printOrder ?? selectedOrder} session={session} />
+      <AddOrderDialog
+        table={selectedTable}
+        items={filteredAddOrderItems}
+        orderItems={addOrderItems}
+        searchTerm={addOrderSearchTerm}
+        isOpen={isAddOrderOpen}
+        isSubmitting={isSendingAdditionalOrder}
+        onSearchChange={setAddOrderSearchTerm}
+        onAddItem={addAdditionalItem}
+        onIncrease={(itemId) => updateAdditionalQuantity(itemId, "increase")}
+        onDecrease={(itemId) => updateAdditionalQuantity(itemId, "decrease")}
+        onRemove={(itemId) => setAddOrderItems((currentItems) => currentItems.filter((orderItem) => orderItem.item.id !== itemId))}
+        onClose={resetAddOrder}
+        onSubmit={submitAdditionalOrder}
+      />
     </div>
   );
 }

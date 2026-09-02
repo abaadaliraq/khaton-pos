@@ -1,5 +1,11 @@
+import { formatBaghdadTime, getElapsedMinutes } from "@/lib/displayFormat";
+
 export function formatElapsedTime(fromIso: string, now = Date.now()) {
-  const minutes = Math.max(0, Math.floor((now - new Date(fromIso).getTime()) / 60000));
+  const minutes = getElapsedMinutes(fromIso, now);
+
+  if (minutes === null) {
+    return "-";
+  }
 
   if (minutes < 1) {
     return "الآن";
@@ -24,14 +30,5 @@ export function formatElapsedTime(fromIso: string, now = Date.now()) {
 }
 
 export function formatKitchenClock(iso?: string) {
-  if (!iso) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat("ar-IQ", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Asia/Baghdad",
-  }).format(new Date(iso));
+  return formatBaghdadTime(iso);
 }
