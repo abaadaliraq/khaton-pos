@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/client";
 import { logSupabaseError } from "@/lib/supabaseError";
 import type {
   CashShift,
+  CashierOption,
+  CashShiftMovementSummary,
   CashShiftSummary,
   CloseCashShiftInput,
   CreateExpenseInput,
@@ -64,6 +66,22 @@ type CashShiftRow = {
   opened_by: string;
   closed_by: string | null;
   created_at: string;
+  cashier_profile: { full_name: string | null; username: string | null } | null;
+  opened_by_profile: { full_name: string | null; username: string | null } | null;
+  closed_by_profile: { full_name: string | null; username: string | null } | null;
+};
+
+type CashMovementSummaryRow = {
+  shift_id: string;
+  direction: "in" | "out";
+  amount: number | string;
+  voided_at: string | null;
+};
+
+type CashierProfileRow = {
+  id: string;
+  username: string;
+  full_name: string;
 };
 
 type ExpectedCashBreakdownPayload = {
@@ -90,7 +108,11 @@ type CloseCashShiftPayload = {
 
 const expenseSelect = "id, expense_number, amount, category, expense_date, payment_method, receipt_number, description, notes, created_by, created_at, created_by_profile:profiles!expenses_created_by_fkey(full_name, username)";
 const customerPaymentSelect = "id, order_id, amount, method, status, created_at, order:orders(order_number, table:restaurant_tables(table_number))";
-const cashShiftSelect = "id, cashier_id, business_date, opened_at, closed_at, opening_cash, counted_cash, expected_cash_snapshot, cash_difference, status, opening_note, closing_note, opened_by, closed_by, created_at";
+const profileNameSelect = "full_name, username";
+const cashShiftSelect = `id, cashier_id, business_date, opened_at, closed_at, opening_cash, counted_cash, expected_cash_snapshot, cash_difference, status, opening_note, closing_note, opened_by, closed_by, created_at,
+  cashier_profile:profiles!cash_shifts_cashier_id_fkey(${profileNameSelect}),
+  opened_by_profile:profiles!cash_shifts_opened_by_fkey(${profileNameSelect}),
+  closed_by_profile:profiles!cash_shifts_closed_by_fkey(${profileNameSelect})`;
 
 function clean(value: string | undefined) {
   const trimmed = value?.trim() ?? "";
@@ -105,6 +127,10 @@ function asAmount(value: number | string) {
 function asNullableAmount(value: number | string | null) {
   if (value === null) return null;
   return asAmount(value);
+}
+
+function profileName(profile: { full_name: string | null; username: string | null } | null | undefined) {
+  return profile?.full_name ?? profile?.username ?? undefined;
 }
 
 function baghdadDayRange(date = new Date()) {
@@ -137,6 +163,7 @@ function rowToCashShift(row: CashShiftRow): CashShift {
   return {
     id: row.id,
     cashierId: row.cashier_id,
+    cashierName: profileName(row.cashier_profile),
     businessDate: row.business_date,
     openedAt: row.opened_at,
     closedAt: row.closed_at,
@@ -148,7 +175,9 @@ function rowToCashShift(row: CashShiftRow): CashShift {
     openingNote: row.opening_note,
     closingNote: row.closing_note,
     openedBy: row.opened_by,
+    openedByName: profileName(row.opened_by_profile),
     closedBy: row.closed_by,
+    closedByName: profileName(row.closed_by_profile),
     createdAt: row.created_at,
   };
 }
@@ -286,23 +315,15 @@ export async function getFinanceSalesSummary(): Promise<FinanceSalesSummary> {
 
 export async function getOpenCashShift(): Promise<CashShift | null> {
   const supabase = createClient();
-  const { data: authData, error: authError } = await supabase.auth.getUser();
 
-  if (authError) {
-    logSupabaseError("[cash shifts auth getUser]", authError);
-    throw authError;
-  }
-
-  if (!authData.user) return null;
-
-  const { data, error } = await supabase
+  const query = supabase
     .from("cash_shifts")
     .select(cashShiftSelect)
-    .eq("cashier_id", authData.user.id)
     .eq("status", "open")
     .order("opened_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+
+  const { data, error } = await query.maybeSingle();
 
   if (error) {
     logSupabaseError("[cash shifts SELECT open]", error);
@@ -312,11 +333,33 @@ export async function getOpenCashShift(): Promise<CashShift | null> {
   return data ? rowToCashShift(data as unknown as CashShiftRow) : null;
 }
 
+export async function getCashierOptions(): Promise<CashierOption[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, username, full_name")
+    .eq("role", "cashier")
+    .eq("status", "active")
+    .order("full_name", { ascending: true });
+
+  if (error) {
+    logSupabaseError("[cashier profiles SELECT]", error);
+    throw error;
+  }
+
+  return ((data ?? []) as unknown as CashierProfileRow[]).map((profile) => ({
+    id: profile.id,
+    name: profile.full_name,
+    username: profile.username,
+  }));
+}
+
 export async function openCashShift(input: OpenCashShiftInput): Promise<CashShift> {
   const supabase = createClient();
   const { data, error } = await supabase.rpc("open_cash_shift" as never, {
     p_opening_cash: input.openingCash,
     p_opening_note: clean(input.openingNote),
+    p_cashier_id: input.cashierId,
   } as never);
 
   if (error) {
@@ -327,9 +370,26 @@ export async function openCashShift(input: OpenCashShiftInput): Promise<CashShif
   return rowToCashShift(data as unknown as CashShiftRow);
 }
 
-export async function getCurrentExpectedCash(): Promise<ExpectedCashBreakdown | null> {
+export async function getExpectedCashForShift(shiftId: string): Promise<ExpectedCashBreakdown> {
   const supabase = createClient();
-  const { data, error } = await supabase.rpc("get_current_expected_cash" as never);
+  const { data, error } = await supabase.rpc("calculate_cash_shift_expected" as never, {
+    p_shift_id: shiftId,
+  } as never);
+
+  if (error) {
+    logSupabaseError("[cash shift RPC calculate_cash_shift_expected]", error);
+    throw error;
+  }
+
+  if (!data) throw new Error("لم يرجع Supabase النقد المتوقع");
+  return payloadToExpectedCashBreakdown(data as ExpectedCashBreakdownPayload);
+}
+
+export async function getCurrentExpectedCash(cashierId?: string): Promise<ExpectedCashBreakdown | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("get_current_expected_cash" as never, {
+    p_cashier_id: cashierId ?? null,
+  } as never);
 
   if (error) {
     logSupabaseError("[cash shift RPC get_current_expected_cash]", error);
@@ -344,6 +404,7 @@ export async function closeCashShift(input: CloseCashShiftInput): Promise<CashSh
   const { data, error } = await supabase.rpc("close_cash_shift" as never, {
     p_counted_cash: input.countedCash,
     p_closing_note: clean(input.closingNote),
+    p_cashier_id: input.cashierId ?? null,
   } as never);
 
   if (error) {
@@ -374,4 +435,30 @@ export async function getRecentCashShifts(): Promise<CashShift[]> {
   }
 
   return ((data ?? []) as unknown as CashShiftRow[]).map(rowToCashShift);
+}
+
+export async function getCashShiftMovementSummaries(shiftIds: string[]): Promise<CashShiftMovementSummary[]> {
+  if (shiftIds.length === 0) return [];
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("cash_movements")
+    .select("shift_id, direction, amount, voided_at")
+    .in("shift_id", shiftIds);
+
+  if (error) {
+    logSupabaseError("[cash movements SELECT summaries]", error);
+    throw error;
+  }
+
+  const summaries = new Map<string, CashShiftMovementSummary>();
+  for (const row of (data ?? []) as unknown as CashMovementSummaryRow[]) {
+    if (row.voided_at) continue;
+    const current = summaries.get(row.shift_id) ?? { shiftId: row.shift_id, cashIn: 0, cashOut: 0 };
+    if (row.direction === "in") current.cashIn += asAmount(row.amount);
+    if (row.direction === "out") current.cashOut += asAmount(row.amount);
+    summaries.set(row.shift_id, current);
+  }
+
+  return shiftIds.map((shiftId) => summaries.get(shiftId) ?? { shiftId, cashIn: 0, cashOut: 0 });
 }

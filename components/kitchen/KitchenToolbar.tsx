@@ -5,8 +5,10 @@ import type { KitchenFilter } from "@/types/kitchen";
 type KitchenToolbarProps = {
   searchTerm: string;
   filter: KitchenFilter;
+  pendingReceiptCount: number;
   onSearchChange: (value: string) => void;
   onFilterChange: (filter: KitchenFilter) => void;
+  onOpenRequisitionReceipts: () => void;
   onRefresh: () => void;
 };
 
@@ -17,10 +19,10 @@ const filters: { id: KitchenFilter; label: string }[] = [
   { id: "priority", label: "أولوية" },
 ];
 
-export function KitchenToolbar({ searchTerm, filter, onSearchChange, onFilterChange, onRefresh }: KitchenToolbarProps) {
+export function KitchenToolbar({ searchTerm, filter, pendingReceiptCount, onSearchChange, onFilterChange, onOpenRequisitionReceipts, onRefresh }: KitchenToolbarProps) {
   return (
     <section className="rounded-lg border border-white/10 bg-[#24211E] p-3">
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
         <div className="relative">
           <Search className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#C9BEB2]" size={19} />
           <input
@@ -57,6 +59,9 @@ export function KitchenToolbar({ searchTerm, filter, onSearchChange, onFilterCha
         <button type="button" onClick={onRefresh} className="flex h-12 items-center justify-center gap-2 rounded-lg border border-white/10 bg-[#302B27] px-4 text-base font-medium text-[#FFF8EE] hover:border-[#D88A3D]">
           <RefreshCw size={18} />
           تحديث
+        </button>
+        <button type="button" onClick={onOpenRequisitionReceipts} className="h-12 rounded-lg border border-white/10 bg-[#302B27] px-4 text-sm font-medium text-[#FFF8EE] hover:border-[#D88A3D]">
+          بانتظار الاستلام {pendingReceiptCount > 0 ? pendingReceiptCount : ""}
         </button>
       </div>
     </section>

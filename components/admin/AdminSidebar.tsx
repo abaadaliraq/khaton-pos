@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import clsx from "clsx";
-import { ClipboardList, Home, ReceiptText, Settings, Table2, UsersRound, Utensils } from "lucide-react";
+import { ClipboardList, Home, ReceiptText, Settings, Table2, Trash2, UsersRound, Utensils, WalletCards } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -11,6 +11,8 @@ const navItems = [
   { href: "/admin/menu", label: "المنيو", icon: Utensils },
   { href: "/admin/staff", label: "العمال", icon: UsersRound },
   { href: "/admin/tables", label: "الطاولات", icon: Table2 },
+  { href: "/admin/waste", label: "الهدر والتلف", icon: Trash2 },
+  { href: "/admin/cash-shifts", label: "ورديات الصندوق", icon: WalletCards },
   { href: "/admin/audit", label: "سجل العمليات", icon: ClipboardList },
   { href: "/admin/settings", label: "الإعدادات", icon: Settings },
 ];

@@ -11,6 +11,7 @@ import { SendOrderDialog } from "@/components/captain/SendOrderDialog";
 import { TableSelector } from "@/components/captain/TableSelector";
 import { OperationalToast } from "@/components/operational/OperationalToast";
 import { useOperationalNotifications } from "@/components/operational/useOperationalNotifications";
+import { createClient } from "@/lib/supabase/client";
 import { signOut } from "@/services/authService";
 import { getMenuCatalog } from "@/services/menuService";
 import { createRestaurantOrder, markOrderAwaitingPaymentByCaptain, releasePaidTable } from "@/services/orderService";
@@ -51,6 +52,7 @@ export function CaptainPosApp() {
   const [releasingTableId, setReleasingTableId] = useState<number | null>(null);
   const [theme, setTheme] = useState<CaptainTheme>("light");
   const tablePromptTimerRef = useRef<number>(0);
+  const tableRefreshTimerRef = useRef<number | null>(null);
 
   const reloadTables = useCallback(async () => {
     const restaurantTables = await getRestaurantTables();
@@ -75,6 +77,45 @@ export function CaptainPosApp() {
       }
     },
   });
+
+  const scheduleTableRefresh = useCallback(() => {
+    if (tableRefreshTimerRef.current) {
+      window.clearTimeout(tableRefreshTimerRef.current);
+    }
+
+    tableRefreshTimerRef.current = window.setTimeout(() => {
+      reloadTables().catch((error) => {
+        console.error("Failed to reload captain tables after realtime change", error);
+      });
+    }, 250);
+  }, [reloadTables]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("captain-table-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleTableRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, scheduleTableRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "table_sessions" }, scheduleTableRefresh)
+      .subscribe((status, error) => {
+        if (error) {
+          console.error("Captain realtime subscription error", error);
+        }
+
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.error("Captain realtime subscription failed", { status });
+        }
+      });
+
+    return () => {
+      if (tableRefreshTimerRef.current) {
+        window.clearTimeout(tableRefreshTimerRef.current);
+        tableRefreshTimerRef.current = null;
+      }
+
+      void supabase.removeChannel(channel);
+    };
+  }, [scheduleTableRefresh]);
 
   useEffect(() => {
     const firstTick = window.setTimeout(() => setCurrentTime(getBaghdadTime()), 0);

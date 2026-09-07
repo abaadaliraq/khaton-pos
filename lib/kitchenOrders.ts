@@ -14,8 +14,14 @@ export function createKitchenOrdersFromSeeds(seeds: KitchenOrderSeed[], now = Da
     tableId: seed.tableId,
     captainName: seed.captainName,
     status: seed.status,
+    aggregateStatus: seed.aggregateStatus ?? (seed.status === "new" ? "submitted" : seed.status === "preparing" ? "preparing" : "ready"),
+    hasOtherStationPending: seed.hasOtherStationPending ?? false,
     priority: seed.priority,
-    items: seed.items,
+    items: seed.items.map((item) => ({
+      ...item,
+      status: item.status ?? (seed.status === "new" ? "submitted" : seed.status === "preparing" ? "preparing" : "ready"),
+      preparationStation: item.preparationStation ?? "kitchen",
+    })),
     timing: {
       receivedAt: minutesAgo(seed.receivedMinutesAgo, now),
       startedAt: seed.startedMinutesAgo ? minutesAgo(seed.startedMinutesAgo, now) : undefined,

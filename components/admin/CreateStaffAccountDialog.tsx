@@ -11,23 +11,45 @@ const roles: { value: SystemRole; label: string }[] = [
   { value: "captain", label: "كابتن" },
   { value: "cashier", label: "كاشير" },
   { value: "kitchen", label: "مطبخ" },
+  { value: "barista", label: "باريستا" },
   { value: "storekeeper", label: "مسؤول المخزن" },
   { value: "accountant", label: "محاسب" },
 ];
 
+function getDefaultSystemRole(member: StaffMember | null): SystemRole {
+  switch (member?.department) {
+    case "cashier":
+      return "cashier";
+    case "kitchen":
+      return "kitchen";
+    case "barista":
+      return "barista";
+    case "inventory":
+      return "storekeeper";
+    case "finance":
+      return "accountant";
+    case "management":
+      return "admin";
+    default:
+      return "captain";
+  }
+}
+
 export function CreateStaffAccountDialog({ member, isOpen, onClose, onCreated }: { member: StaffMember | null; isOpen: boolean; onClose: () => void; onCreated: (member: StaffMember) => void }) {
   const [username, setUsername] = useState("");
-  const [systemRole, setSystemRole] = useState<SystemRole>("captain");
+  const [selectedSystemRole, setSelectedSystemRole] = useState<SystemRole | null>(null);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const systemRole = selectedSystemRole ?? getDefaultSystemRole(member);
 
   if (!isOpen || !member) return null;
 
   function resetAndClose() {
     setUsername("");
+    setSelectedSystemRole(null);
     setPassword("");
     setConfirmPassword("");
     setShowPassword(false);
@@ -76,7 +98,7 @@ export function CreateStaffAccountDialog({ member, isOpen, onClose, onCreated }:
         <p className="mt-1 text-sm text-[#7c6b60]">سيستخدم العامل هذا الحساب للدخول إلى نظام خاتون.</p>
         <div className="mt-4 grid gap-3">
           <label className="grid gap-1 text-sm font-medium text-[#4a3b34]">اسم المستخدم<input value={username} onChange={(e) => setUsername(e.target.value)} className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 outline-none" /></label>
-          <label className="grid gap-1 text-sm font-medium text-[#4a3b34]">الدور<select value={systemRole} onChange={(e) => setSystemRole(e.target.value as SystemRole)} className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 outline-none">{roles.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}</select></label>
+          <label className="grid gap-1 text-sm font-medium text-[#4a3b34]">الدور<select value={systemRole} onChange={(e) => setSelectedSystemRole(e.target.value as SystemRole)} className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 outline-none">{roles.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}</select></label>
           <label className="grid gap-1 text-sm font-medium text-[#4a3b34]">كلمة المرور<div className="relative"><input value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} className="h-11 w-full rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 pl-10 outline-none" /><button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute left-2 top-1/2 -translate-y-1/2 rounded-md p-2 text-[#7c6b60]">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
           <label className="grid gap-1 text-sm font-medium text-[#4a3b34]">تأكيد كلمة المرور<input value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} type={showPassword ? "text" : "password"} className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 outline-none" /></label>
         </div>

@@ -7,23 +7,24 @@ import { formatOrderLabel } from "@/lib/displayFormat";
 import type { Database } from "@/types/database.types";
 import type { OperationalToastState } from "@/components/operational/OperationalToast";
 
-type OperationalRole = "kitchen" | "captain" | "cashier";
+type OperationalRole = "kitchen" | "barista" | "captain" | "cashier";
+type PreparationStation = "kitchen" | "barista" | "drinks" | "shisha";
 type OperationalEventType = "new-order" | "order-ready";
 type OrderStatusEventRow = Database["public"]["Tables"]["order_status_events"]["Row"];
 
 type UseOperationalNotificationsOptions = {
   role: OperationalRole;
+  station?: PreparationStation;
   onRelevantEvent?: (event: { type: OperationalEventType; orderId: string; tableSessionId: string | null; roundNo: number | null }) => void;
 };
 
-const soundPreferenceKey = "khatoun-operational-sound-enabled";
 const soundSources: Record<OperationalEventType, string> = {
   "new-order": "/sounds/new-order.mp3",
   "order-ready": "/sounds/order-ready.mp3",
 };
 
 const eventRoles: Record<OperationalEventType, OperationalRole[]> = {
-  "new-order": ["kitchen", "cashier"],
+  "new-order": ["kitchen", "barista", "cashier"],
   "order-ready": ["captain", "cashier"],
 };
 
@@ -75,8 +76,7 @@ function dedupeKeyForStatusEvent(role: OperationalRole, type: OperationalEventTy
   return row.id ? `${role}:${type}:${row.id}` : `${role}:${type}:${row.order_id}:${row.to_status}:${row.created_at}`;
 }
 
-export function useOperationalNotifications({ role, onRelevantEvent }: UseOperationalNotificationsOptions) {
-  const [soundEnabled, setSoundEnabled] = useState(false);
+export function useOperationalNotifications({ role, station, onRelevantEvent }: UseOperationalNotificationsOptions) {
   const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
   const [toast, setToast] = useState<OperationalToastState | null>(null);
   const audioRefs = useRef<Partial<Record<OperationalEventType, HTMLAudioElement>>>({});
@@ -88,14 +88,6 @@ export function useOperationalNotifications({ role, onRelevantEvent }: UseOperat
   useEffect(() => {
     onRelevantEventRef.current = onRelevantEvent;
   }, [onRelevantEvent]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setSoundEnabled(window.localStorage.getItem(soundPreferenceKey) === "true");
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     audioRefs.current = {
@@ -129,21 +121,21 @@ export function useOperationalNotifications({ role, onRelevantEvent }: UseOperat
   }, []);
 
   useEffect(() => {
-    if (!soundEnabled || isAudioUnlocked) return;
+    if (isAudioUnlocked) return;
 
     const unlock = () => unlockAudio();
-    window.addEventListener("pointerdown", unlock, { once: true });
-    window.addEventListener("keydown", unlock, { once: true });
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
 
     return () => {
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
     };
-  }, [isAudioUnlocked, soundEnabled, unlockAudio]);
+  }, [isAudioUnlocked, unlockAudio]);
 
   const playSound = useCallback(
     (type: OperationalEventType) => {
-      if (!soundEnabled || !isAudioUnlocked) return;
+      if (!isAudioUnlocked) return;
 
       audioQueueRef.current = audioQueueRef.current
         .catch(() => undefined)
@@ -160,7 +152,7 @@ export function useOperationalNotifications({ role, onRelevantEvent }: UseOperat
           }
         });
     },
-    [isAudioUnlocked, soundEnabled],
+    [isAudioUnlocked],
   );
 
   const resolveOrderNotificationInfo = useCallback(async (orderId: string): Promise<OrderNotificationInfo> => {
@@ -187,11 +179,35 @@ export function useOperationalNotifications({ role, onRelevantEvent }: UseOperat
     };
   }, []);
 
+  const orderMatchesStation = useCallback(async (orderId: string) => {
+    if (!station) return true;
+
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("order_has_station_items" as never, {
+      p_order_id: orderId,
+      p_station: station,
+    } as never);
+
+    if (error) {
+      console.error("Failed to check station items for notification", error);
+      return false;
+    }
+
+    return Boolean(data);
+  }, [station]);
+
   const emitNotification = useCallback(
     async (type: OperationalEventType, orderId: string) => {
+      if (type === "new-order" && !(await orderMatchesStation(orderId))) {
+        return;
+      }
+
       const info = await resolveOrderNotificationInfo(orderId);
       onRelevantEventRef.current?.({ type, orderId, tableSessionId: info.tableSessionId, roundNo: info.roundNo });
       const nextToast = notificationText(type, info);
+      if (!isAudioUnlocked) {
+        nextToast.message = `${nextToast.message} · اضغط مرة واحدة لتفعيل تنبيهات النظام`;
+      }
       setToast(nextToast);
 
       if (toastTimerRef.current) {
@@ -201,7 +217,7 @@ export function useOperationalNotifications({ role, onRelevantEvent }: UseOperat
       toastTimerRef.current = window.setTimeout(() => setToast(null), 4200);
       playSound(type);
     },
-    [playSound, resolveOrderNotificationInfo],
+    [isAudioUnlocked, orderMatchesStation, playSound, resolveOrderNotificationInfo],
   );
 
   const handleStatusEvent = useCallback(
@@ -248,21 +264,14 @@ export function useOperationalNotifications({ role, onRelevantEvent }: UseOperat
     };
   }, [handleStatusEvent, role]);
 
-  const toggleSound = useCallback(() => {
-    setSoundEnabled((current) => {
-      const next = !current;
-      window.localStorage.setItem(soundPreferenceKey, String(next));
-      if (next) {
-        unlockAudio();
-      }
-      return next;
-    });
+  const activateSound = useCallback(() => {
+    unlockAudio();
   }, [unlockAudio]);
 
   return {
-    soundEnabled,
-    soundNeedsActivation: soundEnabled && !isAudioUnlocked,
+    soundEnabled: true,
+    soundNeedsActivation: !isAudioUnlocked,
     toast,
-    toggleSound,
+    toggleSound: activateSound,
   };
 }

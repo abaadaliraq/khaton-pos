@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database.types";
 import type { SystemRole } from "@/types/staff";
 
-const allowedRoles: SystemRole[] = ["captain", "cashier", "kitchen", "admin", "storekeeper", "accountant"];
+const allowedRoles: SystemRole[] = ["captain", "cashier", "kitchen", "barista", "admin", "storekeeper", "accountant"];
 const staffSelect = "id, employee_number, profile_id, full_name, phone, secondary_phone, job_title, department, employment_type, shift_type, hire_date, birth_date, salary, address, emergency_contact_name, emergency_contact_phone, notes, status, has_system_access, created_at, updated_at, profile:profiles!staff_members_profile_id_fkey(username, role, status)";
 
 type RequestBody = { staffId?: unknown; username?: unknown; password?: unknown; systemRole?: unknown };
@@ -25,8 +25,18 @@ function isSystemRole(value: unknown): value is SystemRole {
   return typeof value === "string" && allowedRoles.includes(value as SystemRole);
 }
 
+function roleMigrationDetails(role: SystemRole) {
+  const details: Partial<Record<SystemRole, { label: string; migration: string }>> = {
+    barista: { label: "باريستا", migration: "20260906_barista_role_and_permissions.sql" },
+    storekeeper: { label: "مسؤول المخزن", migration: "20260824_storekeeper_role_and_access.sql" },
+    accountant: { label: "محاسب", migration: "20260825_purchase_request_workflow.sql" },
+  };
+
+  return details[role] ?? null;
+}
+
 function isMissingDatabaseRoleError(error: unknown, role: SystemRole) {
-  if (role !== "storekeeper" && role !== "accountant") return false;
+  if (!roleMigrationDetails(role)) return false;
   const text = getSupabaseErrorText(error).toLowerCase();
   return text.includes("invalid user role") ||
     text.includes("invalid system role") ||
@@ -36,9 +46,9 @@ function isMissingDatabaseRoleError(error: unknown, role: SystemRole) {
 }
 
 function roleMigrationMessage(role: SystemRole) {
-  const label = role === "accountant" ? "محاسب" : "مسؤول المخزن";
-  const migration = role === "accountant" ? "20260825_purchase_request_workflow.sql" : "20260824_storekeeper_role_and_access.sql";
-  return `تعذر إنشاء حساب ${label} لأن الدور غير مضاف في قاعدة البيانات. طبّق migration ${migration} ثم حاول مرة أخرى.`;
+  const details = roleMigrationDetails(role);
+  if (!details) return "تعذر إنشاء الحساب لأن الدور غير مضاف في قاعدة البيانات.";
+  return `تعذر إنشاء حساب ${details.label} لأن الدور غير مضاف في قاعدة البيانات. طبّق migration ${details.migration} ثم حاول مرة أخرى.`;
 }
 
 function isSameOrigin(request: NextRequest) {

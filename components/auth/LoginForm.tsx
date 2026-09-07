@@ -17,6 +17,7 @@ const demoAccounts = [
   ["الكابتن", "captain"],
   ["المحاسب", "cashier"],
   ["المطبخ", "kitchen"],
+  ["الباريستا", "barista"],
   ["الإدارة", "admin"],
   ["مسؤول المخزن", "storekeeper"],
   ["محاسب", "accountant"],

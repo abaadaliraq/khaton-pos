@@ -17,11 +17,14 @@ type KitchenOrderCardProps = {
 export function KitchenOrderCard({ order, now, onStatusChange, onOpenDetails }: KitchenOrderCardProps) {
   const late = isKitchenOrderLate(order, now);
   const itemCount = order.items.reduce((total, item) => total + item.quantity, 0);
+  const hasSubmittedItems = order.items.some((item) => item.status === "submitted");
+  const hasPreparingItems = order.items.some((item) => item.status === "preparing");
+  const hasReadyItems = order.items.some((item) => item.status === "ready");
 
   const action =
-    order.status === "new"
+    hasSubmittedItems
       ? { label: "بدء التحضير", next: "preparing" as const, icon: ChefHat }
-      : order.status === "preparing"
+      : hasPreparingItems
         ? { label: "الطلب جاهز", next: "ready" as const, icon: CheckCircle2 }
         : null;
 
@@ -45,7 +48,17 @@ export function KitchenOrderCard({ order, now, onStatusChange, onOpenDetails }: 
           </div>
           <div className="flex flex-col items-end gap-2">
             <span className="rounded-full bg-[#302B27] px-3 py-1 text-sm text-[#FFF8EE]">{kitchenStatusLabels[order.status]}</span>
+            {hasReadyItems && hasSubmittedItems ? (
+              <span className="rounded-full border border-[#D88A3D]/35 bg-[#D88A3D]/10 px-3 py-1 text-xs font-semibold text-[#f3c68d]">
+                بعض الأصناف لم تبدأ
+              </span>
+            ) : null}
             {order.priority === "priority" ? <span className="rounded-full bg-[#D88A3D] px-3 py-1 text-sm font-semibold text-[#171513]">أولوية</span> : null}
+            {order.status === "ready" && order.hasOtherStationPending ? (
+              <span className="rounded-full border border-[#D88A3D]/35 bg-[#D88A3D]/10 px-3 py-1 text-xs font-semibold text-[#f3c68d]">
+                بانتظار محطة أخرى
+              </span>
+            ) : null}
             {late ? (
               <span className="flex items-center gap-1 rounded-full bg-[#B94B43] px-3 py-1 text-sm font-semibold text-white">
                 <AlertTriangle size={15} />

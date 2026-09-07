@@ -2,7 +2,7 @@
 export type EmploymentType = "full_time" | "part_time" | "temporary";
 export type ShiftType = "morning" | "evening" | "night" | "rotating" | "fixed";
 export type StaffStatus = "active" | "on_leave" | "inactive" | "terminated";
-export type SystemRole = "captain" | "cashier" | "kitchen" | "admin" | "storekeeper" | "accountant";
+export type SystemRole = "captain" | "cashier" | "kitchen" | "barista" | "admin" | "storekeeper" | "accountant";
 
 export type StaffProfileSummary = {
   username: string;

@@ -8,9 +8,9 @@ import { ManagementTabs } from "@/components/ui/ManagementTabs";
 import { formatCurrency } from "@/lib/formatCurrency";
 import { createClient } from "@/lib/supabase/client";
 import { logSupabaseError } from "@/lib/supabaseError";
-import { closeCashShift, createExpense, getCurrentExpectedCash, getExpenses, getFinanceSalesSummary, getOpenCashShift, getRecentCashShifts, openCashShift } from "@/services/financeService";
+import { closeCashShift, createExpense, getCashierOptions, getExpectedCashForShift, getExpenses, getFinanceSalesSummary, getOpenCashShift, getRecentCashShifts, openCashShift } from "@/services/financeService";
 import { decidePurchaseRequest, getPurchasePayments, getPurchaseRequests, getPurchases, payPurchase } from "@/services/purchaseService";
-import type { CashShift, CloseCashShiftInput, CreateExpenseInput, CustomerPayment, ExpectedCashBreakdown, Expense, ExpenseCategory, ExpensePaymentMethod, FinanceSalesSummary, OpenCashShiftInput, PayPurchaseInput, Purchase, PurchasePayment, PurchaseRequest } from "@/types/finance";
+import type { CashierOption, CashShift, CloseCashShiftInput, CreateExpenseInput, CustomerPayment, ExpectedCashBreakdown, Expense, ExpenseCategory, ExpensePaymentMethod, FinanceSalesSummary, OpenCashShiftInput, PayPurchaseInput, Purchase, PurchasePayment, PurchaseRequest } from "@/types/finance";
 import { expenseCategoryLabels, expensePaymentMethodLabels, purchasePaymentStatusLabels, purchaseRequestStatusLabels } from "@/types/finance";
 
 type FinanceTab = "overview" | "requests" | "invoices" | "expenses" | "payments";
@@ -67,6 +67,17 @@ function shiftActionError(error: unknown, action: "open" | "close") {
     return action === "open" ? "لا تملك صلاحية فتح الوردية." : "لا تملك صلاحية إغلاق الوردية.";
   }
   return action === "open" ? "تعذر فتح الوردية. حاول مرة أخرى." : "تعذر إغلاق الوردية. حاول مرة أخرى.";
+}
+
+function cashOperationError(error: unknown, fallback: string) {
+  const text = JSON.stringify(error).toLowerCase();
+  if (text.includes("stale_cash_shift_must_close")) {
+    return "يوجد صندوق مفتوح من يوم سابق. راجع النقد وأغلق الصندوق قبل تسجيل أي حركة نقدية جديدة.";
+  }
+  if (text.includes("cash_shift_required")) {
+    return "يجب فتح وردية صندوق قبل تسجيل حركة نقدية.";
+  }
+  return fallback;
 }
 
 function DifferenceLabel({ value }: { value: number }) {
@@ -126,19 +137,19 @@ const movementTypeLabels: Record<FinanceMovement["type"], string> = {
 function DashboardHeader() {
   return (
     <section
-      className="relative isolate min-h-[180px] overflow-hidden rounded-none border-b border-white/10 bg-[#202020] px-5 py-6 lg:min-h-[210px] lg:px-7"
+      className="relative isolate min-h-[92px] overflow-hidden rounded-none border-b border-[#d4c5b4] bg-[#f0e7dc] px-5 py-4 lg:min-h-[104px] lg:px-7"
       style={{
         backgroundImage:
-          'linear-gradient(to left, rgba(32,32,32,0.18), rgba(32,32,32,0.82)), url("/images/dashboard/accountant-dashboard-hero.jpg")',
+          'linear-gradient(to left, rgba(245,240,232,0.76), rgba(245,240,232,0.98)), url("/images/dashboard/accountant-dashboard-hero.jpg")',
         backgroundPosition: "left center",
         backgroundRepeat: "no-repeat",
         backgroundSize: "cover",
       }}
     >
-      <div className="relative z-10 flex min-h-[130px] max-w-3xl flex-col justify-end">
-        <p className="text-xs font-semibold uppercase tracking-normal text-[#ff5656]">FINANCE CENTER</p>
-        <h1 className="mt-2 text-3xl font-semibold text-white">الحسابات</h1>
-        <p className="mt-2 text-sm leading-6 text-zinc-200">متابعة الحركة المالية للمطعم</p>
+      <div className="relative z-10 flex min-h-[64px] max-w-3xl flex-col justify-center">
+        <p className="text-xs font-semibold uppercase tracking-normal text-[#c83333]">FINANCE CENTER</p>
+        <h1 className="mt-1 text-2xl font-semibold text-[#181818]">الحسابات</h1>
+        <p className="mt-1 text-sm leading-6 text-[#51483f]">متابعة الحركة المالية للمطعم</p>
       </div>
     </section>
   );
@@ -185,33 +196,33 @@ function KpiCard({ card }: { card: FinanceKpi }) {
   );
 }
 
-function CashBoxCard({ receivedToday, expensesToday, supplierPaidToday, netToday }: { receivedToday: number; expensesToday: number; supplierPaidToday: number; netToday: number }) {
-  const outgoing = expensesToday + supplierPaidToday;
+function CashBoxCard({ cashIn, cashExpenses, cashSupplierPayments, cashNet }: { cashIn: number; cashExpenses: number; cashSupplierPayments: number; cashNet: number }) {
+  const outgoing = cashExpenses + cashSupplierPayments;
 
   return (
     <section className="rounded-md border border-white/10 bg-[#303030] p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm text-zinc-400">الصندوق</p>
-          <h2 className="mt-1 text-xl font-semibold text-white">حركة اليوم</h2>
+          <h2 className="mt-1 text-xl font-semibold text-white">حركة الوردية</h2>
         </div>
         <Banknote className="text-[#ff5656]" size={24} />
       </div>
       <div className="mt-5 grid gap-3">
         <div className="flex items-center justify-between rounded-md bg-white/[0.04] px-3 py-3">
-          <span className="text-sm text-zinc-300">داخل اليوم</span>
-          <span className="font-semibold text-emerald-300">+ {formatCurrency(receivedToday)}</span>
+          <span className="text-sm text-zinc-300">داخل الوردية</span>
+          <span className="font-semibold text-emerald-300">+ {formatCurrency(cashIn)}</span>
         </div>
         <div className="flex items-center justify-between rounded-md bg-white/[0.04] px-3 py-3">
-          <span className="text-sm text-zinc-300">خارج اليوم</span>
+          <span className="text-sm text-zinc-300">خارج الوردية</span>
           <span className="font-semibold text-[#ff7070]">- {formatCurrency(outgoing)}</span>
         </div>
         <div className="flex items-center justify-between rounded-md border border-white/10 px-3 py-3">
           <span className="text-sm font-medium text-white">صافي الحركة</span>
-          <span className="font-semibold text-white">{formatCurrency(netToday)}</span>
+          <span className="font-semibold text-white">{formatCurrency(cashNet)}</span>
         </div>
       </div>
-      <p className="mt-4 text-xs leading-5 text-zinc-400">يمثل حركة اليوم ولا يمثل الرصيد المرحّل.</p>
+      <p className="mt-4 text-xs leading-5 text-zinc-400">يمثل حركة الوردية المفتوحة حسب سجلات الصندوق.</p>
     </section>
   );
 }
@@ -329,6 +340,7 @@ function CashShiftCard({
   openShift,
   expectedCash,
   recentShifts,
+  cashierOptions,
   onOpen,
   onClose,
   isSaving,
@@ -336,11 +348,15 @@ function CashShiftCard({
   openShift: CashShift | null;
   expectedCash: ExpectedCashBreakdown | null;
   recentShifts: CashShift[];
+  cashierOptions: CashierOption[];
   onOpen: () => void;
   onClose: () => void;
   isSaving: boolean;
 }) {
   const lastClosedShift = recentShifts.find((shift) => shift.status === "closed") ?? null;
+  const isStaleOpenShift = openShift ? openShift.businessDate < todayKey() : false;
+  const cashOut = (expectedCash?.cashExpenses ?? 0) + (expectedCash?.cashSupplierPayments ?? 0);
+  const openShiftCashier = openShift ? cashierOptions.find((cashier) => cashier.id === openShift.cashierId) : null;
 
   return (
     <section className="rounded-md border border-white/10 bg-[#303030] p-5 shadow-sm">
@@ -349,7 +365,7 @@ function CashShiftCard({
           <p className="text-sm text-zinc-400">الوردية الحالية</p>
           <h2 className="mt-1 text-xl font-semibold text-white">{openShift ? "حالة: مفتوحة" : "لا توجد وردية مفتوحة"}</h2>
           <p className="mt-2 text-sm leading-6 text-zinc-400">
-            {openShift ? "متابعة النقد المتوقع لهذه الوردية فقط." : "افتح وردية لبدء متابعة الصندوق النقدي."}
+            {openShift ? `متابعة النقد المتوقع لوردية ${openShiftCashier?.name ?? "الكاشير المحدد"}.` : "افتح وردية لكاشير محدد لبدء متابعة الصندوق النقدي."}
           </p>
         </div>
         <span className="grid h-10 w-10 place-items-center rounded-md bg-white/[0.06] text-[#ff5656]">
@@ -359,7 +375,35 @@ function CashShiftCard({
 
       {openShift ? (
         <div className="mt-5 space-y-4">
+          {isStaleOpenShift ? (
+            <div className="rounded-md border border-[#ff5656]/30 bg-[#ff5656]/10 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-white">يوجد صندوق مفتوح من يوم سابق</p>
+                  <p className="mt-2 text-sm leading-6 text-zinc-300">
+                    هذه الوردية بدأت بتاريخ {formatDate(`${openShift.businessDate}T00:00:00+03:00`)} ولم يتم إغلاقها. يجب مراجعة النقد الموجود فعلياً وإغلاق الصندوق قبل بدء العمليات النقدية لليوم الجديد.
+                  </p>
+                </div>
+                <button type="button" disabled={isSaving || !expectedCash} onClick={onClose} className="inline-flex h-10 items-center gap-2 rounded-md bg-[#ff5656] px-4 text-sm font-semibold text-white disabled:opacity-50">
+                  <Clock3 size={16} />
+                  مراجعة وإغلاق الصندوق
+                </button>
+              </div>
+              <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-3">
+                <p className="text-zinc-400">تاريخ الفتح: <span className="text-zinc-100">{formatDate(`${openShift.businessDate}T00:00:00+03:00`)}</span></p>
+                <p className="text-zinc-400">وقت الفتح: <span className="text-zinc-100">{formatTime(openShift.openedAt)}</span></p>
+                <p className="text-zinc-400">الرصيد الافتتاحي: <span className="text-zinc-100">{formatCurrency(openShift.openingCash)}</span></p>
+                <p className="text-zinc-400">إجمالي Cash In: <span className="text-emerald-200">{formatCurrency(expectedCash?.cashSales ?? 0)}</span></p>
+                <p className="text-zinc-400">إجمالي Cash Out: <span className="text-[#ffb0b0]">{formatCurrency(cashOut)}</span></p>
+                <p className="text-zinc-400">النقد المتوقع الحالي: <span className="text-zinc-100">{formatCurrency(expectedCash?.expectedCash ?? openShift.openingCash)}</span></p>
+              </div>
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-md bg-white/[0.04] p-3">
+              <p className="text-xs text-zinc-500">الكاشير</p>
+              <p className="mt-1 font-semibold text-white">{openShiftCashier?.name ?? openShift.cashierId}</p>
+            </div>
             <div className="rounded-md bg-white/[0.04] p-3">
               <p className="text-xs text-zinc-500">بدأت</p>
               <p className="mt-1 font-semibold text-white">{formatTime(openShift.openedAt)}</p>
@@ -462,13 +506,15 @@ function RecentCashShifts({ shifts }: { shifts: CashShift[] }) {
 
 function OpenShiftModal({
   form,
+  cashierOptions,
   onChange,
   onCancel,
   onSubmit,
   isSaving,
 }: {
-  form: { openingCash: string; openingNote: string };
-  onChange: (form: { openingCash: string; openingNote: string }) => void;
+  form: { cashierId: string; openingCash: string; openingNote: string };
+  cashierOptions: CashierOption[];
+  onChange: (form: { cashierId: string; openingCash: string; openingNote: string }) => void;
   onCancel: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   isSaving: boolean;
@@ -478,6 +524,20 @@ function OpenShiftModal({
       <form onSubmit={onSubmit} className="w-full max-w-md rounded-md border border-white/10 bg-[#303030] p-5 shadow-2xl">
         <h2 className="text-lg font-semibold text-white">فتح وردية جديدة</h2>
         <div className="mt-4 grid gap-3">
+          <label className="grid gap-1 text-sm font-medium text-zinc-200">
+            الكاشير
+            <select
+              required
+              value={form.cashierId}
+              onChange={(event) => onChange({ ...form, cashierId: event.target.value })}
+              className="h-11 rounded-md border border-white/10 bg-[#252525] px-3 text-sm text-white outline-none focus:border-[#ff5656]"
+            >
+              <option value="">اختر الكاشير</option>
+              {cashierOptions.map((cashier) => (
+                <option key={cashier.id} value={cashier.id}>{cashier.name} - {cashier.username}</option>
+              ))}
+            </select>
+          </label>
           <label className="grid gap-1 text-sm font-medium text-zinc-200">
             الرصيد الافتتاحي
             <div className="relative">
@@ -593,6 +653,7 @@ function FinanceOverview({
   openShift,
   expectedCash,
   recentCashShifts,
+  cashierOptions,
   pendingRequests,
   unpaidPurchases,
   payments,
@@ -606,6 +667,7 @@ function FinanceOverview({
   openShift: CashShift | null;
   expectedCash: ExpectedCashBreakdown | null;
   recentCashShifts: CashShift[];
+  cashierOptions: CashierOption[];
   pendingRequests: PurchaseRequest[];
   unpaidPurchases: Purchase[];
   payments: PurchasePayment[];
@@ -733,13 +795,14 @@ function FinanceOverview({
         </div>
       </section>
 
-      <CashShiftCard
-        openShift={openShift}
-        expectedCash={expectedCash}
-        recentShifts={recentCashShifts}
-        onOpen={onOpenShift}
-        onClose={onCloseShift}
-        isSaving={isSaving}
+        <CashShiftCard
+          openShift={openShift}
+          expectedCash={expectedCash}
+          recentShifts={recentCashShifts}
+          cashierOptions={cashierOptions}
+          onOpen={onOpenShift}
+          onClose={onCloseShift}
+          isSaving={isSaving}
       />
 
       <section className="space-y-3">
@@ -757,7 +820,7 @@ function FinanceOverview({
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.55fr)]">
         <div className="space-y-4">
-          <CashBoxCard receivedToday={cashSalesToday} expensesToday={cashExpensesToday} supplierPaidToday={cashSupplierPaidToday} netToday={cashNetToday} />
+          <CashBoxCard cashIn={cashSalesToday} cashExpenses={cashExpensesToday} cashSupplierPayments={cashSupplierPaidToday} cashNet={cashNetToday} />
           <RecentCashShifts shifts={recentCashShifts.slice(0, 5)} />
           <FinancialMovements movements={movements} />
         </div>
@@ -859,6 +922,7 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
   const [openShift, setOpenShift] = useState<CashShift | null>(null);
   const [expectedCash, setExpectedCash] = useState<ExpectedCashBreakdown | null>(null);
   const [recentCashShifts, setRecentCashShifts] = useState<CashShift[]>([]);
+  const [cashierOptions, setCashierOptions] = useState<CashierOption[]>([]);
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
   const [expandedPurchaseId, setExpandedPurchaseId] = useState<string | null>(null);
   const [paymentPurchase, setPaymentPurchase] = useState<Purchase | null>(null);
@@ -870,7 +934,7 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
   const [isOpenShiftModalOpen, setIsOpenShiftModalOpen] = useState(false);
   const [isCloseShiftModalOpen, setIsCloseShiftModalOpen] = useState(false);
-  const [openShiftForm, setOpenShiftForm] = useState({ openingCash: "", openingNote: "" });
+  const [openShiftForm, setOpenShiftForm] = useState({ cashierId: "", openingCash: "", openingNote: "" });
   const [closeShiftForm, setCloseShiftForm] = useState({ countedCash: "", closingNote: "" });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -905,16 +969,17 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
     }
     setError("");
     try {
-      const [nextRequests, nextPurchases, nextPayments, nextExpenses, nextSalesSummary, nextOpenShift, nextExpectedCash, nextRecentCashShifts] = await Promise.all([
+      const [nextRequests, nextPurchases, nextPayments, nextExpenses, nextSalesSummary, nextOpenShift, nextRecentCashShifts, nextCashierOptions] = await Promise.all([
         getPurchaseRequests(),
         getPurchases(),
         getPurchasePayments(),
         mode === "finance" ? getExpenses() : Promise.resolve([]),
         mode === "finance" ? getFinanceSalesSummary() : Promise.resolve(null),
         mode === "finance" ? getOpenCashShift() : Promise.resolve(null),
-        mode === "finance" ? getCurrentExpectedCash() : Promise.resolve(null),
         mode === "finance" ? getRecentCashShifts() : Promise.resolve([]),
+        mode === "finance" ? getCashierOptions() : Promise.resolve([]),
       ]);
+      const nextExpectedCash = nextOpenShift ? await getExpectedCashForShift(nextOpenShift.id) : null;
       setRequests(nextRequests);
       setPurchases(nextPurchases);
       setPayments(nextPayments);
@@ -923,7 +988,8 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
       setOpenShift(nextOpenShift);
       setExpectedCash(nextExpectedCash);
       setRecentCashShifts(nextRecentCashShifts);
-      return { nextRequests, nextPurchases, nextPayments, nextExpenses, nextSalesSummary, nextOpenShift, nextExpectedCash, nextRecentCashShifts };
+      setCashierOptions(nextCashierOptions);
+      return { nextRequests, nextPurchases, nextPayments, nextExpenses, nextSalesSummary, nextOpenShift, nextExpectedCash, nextRecentCashShifts, nextCashierOptions };
     } catch (loadError) {
       logSupabaseError("[finance dashboard load]", loadError);
       setError("تعذر تحميل بيانات الحسابات.");
@@ -1041,7 +1107,7 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
       flash("تم تسجيل دفع المورد");
     } catch (paymentError) {
       logSupabaseError("[purchase payment submit]", paymentError);
-      setError("تعذر تسجيل دفع المورد.");
+      setError(cashOperationError(paymentError, "تعذر تسجيل دفع المورد."));
     } finally {
       setIsSaving(false);
     }
@@ -1061,7 +1127,7 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
       flash("تم تسجيل المصروف");
     } catch (expenseError) {
       logSupabaseError("[accountant expense create]", expenseError);
-      setError("تعذر تسجيل المصروف.");
+      setError(cashOperationError(expenseError, "تعذر تسجيل المصروف."));
     } finally {
       setIsSaving(false);
     }
@@ -1070,6 +1136,11 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
   async function submitOpenShift(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const openingCash = parseCashInput(openShiftForm.openingCash);
+    if (!openShiftForm.cashierId) {
+      setError("اختر الكاشير قبل فتح الوردية.");
+      return;
+    }
+
     if (openingCash === null) {
       setError("أدخل رصيداً افتتاحياً صحيحاً.");
       return;
@@ -1079,12 +1150,13 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
     setError("");
     try {
       const payload: OpenCashShiftInput = {
+        cashierId: openShiftForm.cashierId,
         openingCash,
         openingNote: openShiftForm.openingNote,
       };
       const created = await openCashShift(payload);
       setOpenShift(created);
-      setOpenShiftForm({ openingCash: "", openingNote: "" });
+      setOpenShiftForm({ cashierId: "", openingCash: "", openingNote: "" });
       setIsOpenShiftModalOpen(false);
       await loadData();
       flash("تم فتح الوردية");
@@ -1108,6 +1180,7 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
     setError("");
     try {
       const payload: CloseCashShiftInput = {
+        cashierId: openShift?.cashierId,
         countedCash,
         closingNote: closeShiftForm.closingNote,
       };
@@ -1132,7 +1205,7 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
   }
 
   return (
-    <div className={mode === "finance" ? "-mx-4 -my-5 min-h-[calc(100vh-4rem)] space-y-5 bg-[#292929] px-4 pb-5 lg:-mx-6 lg:px-6" : "space-y-5"}>
+    <div className={mode === "finance" ? "-mx-4 -my-5 min-h-[calc(100vh-4rem)] space-y-4 bg-[var(--kh-page)] px-4 pb-5 lg:-mx-6 lg:px-6" : "space-y-4"}>
       {mode === "finance" ? (
         <div className="-mx-4 lg:-mx-6">
           <DashboardHeader />
@@ -1168,13 +1241,14 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
           openShift={openShift}
           expectedCash={expectedCash}
           recentCashShifts={recentCashShifts}
+          cashierOptions={cashierOptions}
           pendingRequests={pendingRequests}
           unpaidPurchases={unpaidPurchases}
           payments={payments}
           expenses={expenses}
           purchases={purchases}
           onOpenShift={() => {
-            setOpenShiftForm({ openingCash: "", openingNote: "" });
+            setOpenShiftForm({ cashierId: cashierOptions.length === 1 ? cashierOptions[0].id : "", openingCash: "", openingNote: "" });
             setIsOpenShiftModalOpen(true);
           }}
           onCloseShift={() => {
@@ -1314,6 +1388,7 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
       {isOpenShiftModalOpen ? (
         <OpenShiftModal
           form={openShiftForm}
+          cashierOptions={cashierOptions}
           onChange={setOpenShiftForm}
           onCancel={() => setIsOpenShiftModalOpen(false)}
           onSubmit={submitOpenShift}

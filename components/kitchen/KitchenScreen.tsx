@@ -8,12 +8,16 @@ import { KitchenOrderDetails } from "@/components/kitchen/KitchenOrderDetails";
 import { KitchenStats } from "@/components/kitchen/KitchenStats";
 import { KitchenToast } from "@/components/kitchen/KitchenToast";
 import { KitchenToolbar } from "@/components/kitchen/KitchenToolbar";
+import { InventoryRequisitionRequestDialog } from "@/components/inventory/InventoryRequisitionRequestDialog";
+import { KitchenRequisitionReceiptsDialog } from "@/components/inventory/KitchenRequisitionReceiptsDialog";
+import { InventoryWasteDialog } from "@/components/inventory/InventoryWasteDialog";
 import { OperationalToast } from "@/components/operational/OperationalToast";
 import { useOperationalNotifications } from "@/components/operational/useOperationalNotifications";
 import { kitchenActiveStatuses } from "@/config/kitchen";
 import { getTimestamp } from "@/lib/displayFormat";
 import { isKitchenOrderLate, matchesKitchenFilter, matchesKitchenSearch } from "@/lib/kitchenOrders";
 import { createClient } from "@/lib/supabase/client";
+import { getInventoryRequisitions } from "@/services/inventoryRequisitionService";
 import { getKitchenOrders, updateKitchenOrderStatus } from "@/services/kitchenService";
 import type { UserSession } from "@/types/auth";
 import type { KitchenFilter, KitchenOrder, KitchenOrderStatus } from "@/types/kitchen";
@@ -46,9 +50,13 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
   const [activeMobileStatus, setActiveMobileStatus] = useState<KitchenOrderStatus>("new");
   const [selectedOrder, setSelectedOrder] = useState<KitchenOrder | null>(null);
   const [isCompletedOpen, setIsCompletedOpen] = useState(false);
+  const [isMaterialRequestOpen, setIsMaterialRequestOpen] = useState(false);
+  const [isReceiptDialogOpen, setIsReceiptDialogOpen] = useState(false);
+  const [isWasteDialogOpen, setIsWasteDialogOpen] = useState(false);
+  const [pendingReceiptCount, setPendingReceiptCount] = useState(0);
   const [toast, setToast] = useState("");
   const realtimeRefreshTimerRef = useRef<number | null>(null);
-  const notifications = useOperationalNotifications({ role: "kitchen" });
+  const notifications = useOperationalNotifications({ role: "kitchen", station: "kitchen" });
 
   function showToast(message: string) {
     setToast(message);
@@ -60,6 +68,12 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
     setOrders(nextOrders);
     setNow(Date.now());
   }, []);
+
+  const refreshRequisitions = useCallback(async () => {
+    const requisitions = await getInventoryRequisitions();
+    setPendingReceiptCount(requisitions.filter((requisition) => requisition.destination === "kitchen" && requisition.status === "issued").length);
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -73,6 +87,9 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
 
         setOrders(nextOrders);
         setNow(Date.now());
+        refreshRequisitions().catch((error) => {
+          console.error("Failed to load kitchen requisitions", error);
+        });
       } catch (error) {
         console.error("Failed to load kitchen orders", error);
 
@@ -89,7 +106,7 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
       isMounted = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [refreshRequisitions]);
 
   useEffect(() => {
     let isMounted = true;
@@ -117,6 +134,26 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
       .channel("kitchen-order-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_requisitions" }, () => {
+        refreshRequisitions().catch((error) => {
+          console.error("Failed to refresh kitchen requisitions after realtime change", error);
+        });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_requisition_items" }, () => {
+        refreshRequisitions().catch((error) => {
+          console.error("Failed to refresh kitchen requisition items after realtime change", error);
+        });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_waste_reports" }, () => {
+        refreshRequisitions().catch((error) => {
+          console.error("Failed to refresh kitchen waste after realtime change", error);
+        });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_waste_items" }, () => {
+        refreshRequisitions().catch((error) => {
+          console.error("Failed to refresh kitchen waste items after realtime change", error);
+        });
+      })
       .subscribe((status, error) => {
         if (error) {
           console.error("Kitchen realtime subscription error", error);
@@ -137,7 +174,7 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
 
       void supabase.removeChannel(channel);
     };
-  }, [refreshOrders]);
+  }, [refreshOrders, refreshRequisitions]);
 
   const visibleOrders = useMemo(() => {
     return orders
@@ -196,9 +233,8 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
     <div dir="rtl" className="min-h-screen bg-[#171513] text-[#FFF8EE]">
       <KitchenHeader
         session={session}
-        soundEnabled={notifications.soundEnabled}
-        soundNeedsActivation={notifications.soundNeedsActivation}
-        onToggleSound={notifications.toggleSound}
+        onOpenMaterialRequest={() => setIsMaterialRequestOpen(true)}
+        onOpenWaste={() => setIsWasteDialogOpen(true)}
         onOpenCompleted={() => setIsCompletedOpen(true)}
         onAddDemoOrder={refreshFromDatabase}
         onResetDemoData={refreshFromDatabase}
@@ -209,8 +245,10 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
         <KitchenToolbar
           searchTerm={searchTerm}
           filter={filter}
+          pendingReceiptCount={pendingReceiptCount}
           onSearchChange={setSearchTerm}
           onFilterChange={setFilter}
+          onOpenRequisitionReceipts={() => setIsReceiptDialogOpen(true)}
           onRefresh={() => {
             void refreshFromDatabase();
           }}
@@ -226,6 +264,34 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
       </main>
 
       <KitchenOrderDetails order={selectedOrder} now={now} onClose={() => setSelectedOrder(null)} />
+      <InventoryRequisitionRequestDialog
+        isOpen={isMaterialRequestOpen}
+        defaultDestination="kitchen"
+        destinationLocked
+        onClose={() => setIsMaterialRequestOpen(false)}
+        onCreated={() => {
+          void refreshRequisitions();
+          showToast("تم إرسال طلب المواد للمخزن");
+        }}
+      />
+      <KitchenRequisitionReceiptsDialog
+        isOpen={isReceiptDialogOpen}
+        onClose={() => setIsReceiptDialogOpen(false)}
+        onChanged={() => {
+          void refreshRequisitions();
+          showToast("تم تأكيد استلام المواد");
+        }}
+      />
+      <InventoryWasteDialog
+        isOpen={isWasteDialogOpen}
+        context="issued_department"
+        defaultDestination="kitchen"
+        onClose={() => setIsWasteDialogOpen(false)}
+        onPosted={() => {
+          void refreshRequisitions();
+          showToast("تم تسجيل هدر المطبخ");
+        }}
+      />
       <CompletedOrdersDialog orders={orders} isOpen={isCompletedOpen} onClose={() => setIsCompletedOpen(false)} />
       <KitchenToast message={toast} />
       <OperationalToast toast={notifications.toast} />

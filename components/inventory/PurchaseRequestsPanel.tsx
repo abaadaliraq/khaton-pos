@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, PackageCheck, Plus, Save, UserPlus, X } from "lucide-react";
+import { CheckCircle2, PackageCheck, Plus, RefreshCw, Save, Search, UserPlus, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { formatCurrency } from "@/lib/formatCurrency";
 import { logSupabaseError } from "@/lib/supabaseError";
@@ -64,11 +64,22 @@ export function PurchaseRequestsPanel({
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<PurchaseRequest["status"] | "all">("all");
 
   const activeItems = items.filter((item) => item.isActive);
   const approvedRequests = requests.filter((request) => request.status === "approved");
   const pendingRequests = requests.filter((request) => request.status === "pending");
-  const displayedRequests = mode === "receiving" ? approvedRequests : requests;
+  const displayedRequests = (mode === "receiving" ? approvedRequests : requests).filter((request) => {
+    const query = search.trim().toLocaleLowerCase("ar-IQ");
+    const searchMatches =
+      !query ||
+      `#${request.requestNumber} ${request.requestedByName} ${request.decidedByName ?? ""} ${request.receivedByName ?? ""} ${request.items.map((item) => item.inventoryItemName).join(" ")}`
+        .toLocaleLowerCase("ar-IQ")
+        .includes(query);
+    const statusMatches = statusFilter === "all" || request.status === statusFilter;
+    return searchMatches && statusMatches;
+  });
   const receiveTotal = useMemo(() => (receiveForm?.items ?? []).reduce((total, item) => total + item.quantity * item.unitPrice, 0), [receiveForm]);
 
   const loadRequests = useCallback(async () => {
@@ -220,22 +231,28 @@ export function PurchaseRequestsPanel({
       {message ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p> : null}
       {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
 
-      <section className="flex flex-wrap items-center justify-between gap-3">
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[#e4d8c8] bg-white px-3 py-2 shadow-sm">
         <div>
           <p className="text-sm text-[#7c6b60]">إدارة المخزن</p>
-          <h2 className="text-xl font-semibold text-[#2f211c]">{mode === "receiving" ? "المشتريات / الاستلام" : "طلبات الشراء"}</h2>
+          <h2 className="text-xl font-semibold text-[#2f211c]">{mode === "receiving" ? "المشتريات / الاستلام" : "طلبات الشراء"} | {formatNumber(displayedRequests.length)} سجل</h2>
         </div>
-        {mode === "requests" ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <Search size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#9a8779]" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="بحث رقم / مادة / مستخدم" className="h-9 w-56 rounded-md border border-[#e4d8c8] bg-white pr-8 pl-3 text-sm outline-none focus:border-[#a65f3f]" />
+          </div>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as PurchaseRequest["status"] | "all")} className="h-9 rounded-md border border-[#e4d8c8] bg-white px-3 text-sm">
+            <option value="all">كل الحالات</option>
+            {Object.entries(purchaseRequestStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          <button type="button" onClick={() => void loadRequests()} className="inline-flex h-9 items-center gap-2 rounded-md border border-[#e4d8c8] px-3 text-sm text-[#4a3b34] hover:bg-[#f5eee6]"><RefreshCw size={15} />تحديث</button>
+          {mode === "requests" ? (
           <button type="button" onClick={() => setIsRequestFormOpen((current) => !current)} className="inline-flex h-10 items-center gap-2 rounded-md bg-[#a65f3f] px-4 text-sm font-semibold text-white hover:bg-[#8f4e34]">
             <Plus size={17} />
             طلب شراء جديد
           </button>
-        ) : null}
-      </section>
-
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-md border border-[#e4d8c8] bg-white p-4 shadow-sm"><p className="text-sm text-[#7c6b60]">بانتظار الموافقة</p><p className="mt-2 text-2xl font-semibold text-[#2f211c]">{formatNumber(pendingRequests.length)}</p></div>
-        <div className="rounded-md border border-[#e4d8c8] bg-white p-4 shadow-sm"><p className="text-sm text-[#7c6b60]">طلبات معتمدة</p><p className="mt-2 text-2xl font-semibold text-[#2f211c]">{formatNumber(approvedRequests.length)}</p></div>
+          ) : null}
+        </div>
       </section>
 
       {mode === "requests" && isRequestFormOpen ? (
@@ -269,24 +286,47 @@ export function PurchaseRequestsPanel({
       ) : null}
 
       <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-[#eee4d8] p-4"><h2 className="font-semibold text-[#2f211c]">{mode === "receiving" ? "طلبات شراء معتمدة للاستلام" : "طلبات الشراء"}</h2>{isLoading ? <span className="text-sm text-[#7c6b60]">جارٍ التحميل...</span> : null}</div>
-        {displayedRequests.length === 0 ? <p className="p-4 text-sm text-[#7c6b60]">{mode === "receiving" ? "لا توجد طلبات معتمدة للاستلام حالياً" : "لا توجد طلبات شراء حتى الآن"}</p> : null}
-        <div className="divide-y divide-[#eee4d8]">
-          {displayedRequests.map((request) => (
-            <article key={request.id} className="p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-[#2f211c]">طلب شراء #{request.requestNumber}</p>
-                  <p className="text-sm text-[#7c6b60]">{purchaseRequestStatusLabels[request.status]} · {formatDateTime(request.createdAt)}</p>
-                </div>
-                {request.status === "approved" ? <button type="button" onClick={() => openReceive(request)} className="inline-flex h-10 items-center gap-2 rounded-md bg-[#5d4032] px-4 text-sm font-semibold text-white"><PackageCheck size={17} />تسجيل الاستلام</button> : null}
-              </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {request.items.map((item) => <div key={item.id} className="rounded-md border border-[#eee4d8] bg-[#fbfaf7] p-3 text-sm"><p className="font-medium text-[#2f211c]">{item.inventoryItemName}</p><p className="text-[#7c6b60]">{formatNumber(item.quantity)} {item.unitCode}</p></div>)}
-              </div>
-              {request.decisionNotes ? <p className="mt-3 text-sm text-[#7c6b60]">ملاحظة القرار: {request.decisionNotes}</p> : null}
-            </article>
-          ))}
+        <div className="flex items-center justify-between border-b border-[#eee4d8] bg-[#fbfaf7] px-3 py-2"><h2 className="font-semibold text-[#2f211c]">{mode === "receiving" ? "طلبات شراء معتمدة للاستلام" : "طلبات الشراء"} · بانتظار {formatNumber(pendingRequests.length)} · معتمدة {formatNumber(approvedRequests.length)}</h2>{isLoading ? <span className="text-sm text-[#7c6b60]">جارٍ التحميل...</span> : null}</div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] table-fixed border-collapse text-xs">
+            <thead className="sticky top-0 z-20 bg-[#2b2421] text-white">
+              <tr>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">رقم الطلب</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">التاريخ</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">طالب الشراء</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">عدد المواد</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">الحالة</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">وافق بواسطة</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">وقت الموافقة</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">المستلم</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">آخر استلام</th>
+                <th className="px-3 py-2 text-right font-semibold">الإجراء</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#eee4d8]">
+              {displayedRequests.map((request) => (
+                <tr key={request.id} className="odd:bg-white even:bg-[#fffdfa] hover:bg-[#fff4eb]">
+                  <td className="border-l border-[#f0e5da] px-3 py-2 font-semibold text-[#2f211c]" dir="ltr">PUR-{String(request.requestNumber).padStart(4, "0")}</td>
+                  <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{formatDateTime(request.createdAt)}</td>
+                  <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{request.requestedByName}</td>
+                  <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{formatNumber(request.items.length)}</td>
+                  <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{purchaseRequestStatusLabels[request.status]}</td>
+                  <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{request.decidedByName ?? "-"}</td>
+                  <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{formatDateTime(request.decidedAt)}</td>
+                  <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{request.receivedByName ?? "-"}</td>
+                  <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{formatDateTime(request.receivedAt)}</td>
+                  <td className="px-3 py-2">
+                    {request.status === "approved" ? <button type="button" onClick={() => openReceive(request)} className="inline-flex h-8 items-center gap-2 rounded-md bg-[#5d4032] px-3 text-xs font-semibold text-white"><PackageCheck size={14} />تسجيل الاستلام</button> : <span className="text-[#9a8779]">-</span>}
+                  </td>
+                </tr>
+              ))}
+              {displayedRequests.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-3 py-8 text-center text-sm text-[#4a3b34]">{mode === "receiving" ? "لا توجد طلبات معتمدة للاستلام حالياً" : "لا توجد طلبات شراء مطابقة"}</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </div>
       </section>
 

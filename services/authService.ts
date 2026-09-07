@@ -10,7 +10,7 @@ const LEGACY_STORAGE_KEYS = [
   "khatoun_pos_kitchen_state",
 ];
 
-const allowedRoles: UserRole[] = ["captain", "cashier", "kitchen", "admin", "storekeeper", "accountant", "owner"];
+const allowedRoles: UserRole[] = ["captain", "cashier", "kitchen", "barista", "admin", "storekeeper", "accountant", "owner"];
 
 type ProfileRow = {
   username: string;

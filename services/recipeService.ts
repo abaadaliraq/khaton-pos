@@ -8,6 +8,7 @@ type SupabaseError = { message: string };
 type MenuItemRow = {
   id: string;
   name_ar: string;
+  preparation_station: "kitchen" | "barista" | "drinks" | "shisha";
   price: number | null;
   inventory_tracking_enabled: boolean;
   is_available: boolean;
@@ -103,7 +104,7 @@ function mapRecipeItem(row: RecipeItemRow): RecipeItem {
 export async function getRecipeSummaries(): Promise<RecipeSummary[]> {
   const supabase = createClient();
   const [{ data: menuItems, error: menuError }, { data: recipes, error: recipeError }] = await Promise.all([
-    supabase.from("menu_items" as never).select("id, name_ar, price, inventory_tracking_enabled, is_available, sort_order").order("sort_order", { ascending: true }),
+    supabase.from("menu_items" as never).select("id, name_ar, preparation_station, price, inventory_tracking_enabled, is_available, sort_order").order("sort_order", { ascending: true }),
     supabase
       .from("recipes" as never)
       .select(
@@ -123,6 +124,7 @@ export async function getRecipeSummaries(): Promise<RecipeSummary[]> {
       recipeId: recipe?.id,
       menuItemId: menuItem.id,
       menuItemName: menuItem.name_ar,
+      preparationStation: menuItem.preparation_station,
       sellingPrice: Number(menuItem.price ?? 0),
       version: recipe?.version,
       isActive: Boolean(recipe),

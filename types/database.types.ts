@@ -8,7 +8,7 @@ export type Database = {
           id: string;
           username: string;
           full_name: string;
-          role: "captain" | "cashier" | "kitchen" | "admin" | "storekeeper" | "accountant" | "owner";
+          role: "captain" | "cashier" | "kitchen" | "barista" | "admin" | "storekeeper" | "accountant" | "owner";
           status: "active" | "inactive" | "suspended";
           created_at: string;
           updated_at: string;
@@ -17,7 +17,7 @@ export type Database = {
           id: string;
           username: string;
           full_name: string;
-          role: "captain" | "cashier" | "kitchen" | "admin" | "storekeeper" | "accountant" | "owner";
+          role: "captain" | "cashier" | "kitchen" | "barista" | "admin" | "storekeeper" | "accountant" | "owner";
           status?: "active" | "inactive" | "suspended";
           created_at?: string;
           updated_at?: string;
@@ -507,13 +507,13 @@ export type Database = {
         Args: { p_shift_id: string; p_cutoff_at?: string | null };
         Returns: Json;
       };
-      get_current_expected_cash: { Args: Record<string, never>; Returns: Json };
+      get_current_expected_cash: { Args: { p_cashier_id?: string | null }; Returns: Json };
       open_cash_shift: {
-        Args: { p_opening_cash: number; p_opening_note?: string | null };
+        Args: { p_opening_cash: number; p_opening_note?: string | null; p_cashier_id?: string | null };
         Returns: Database["public"]["Tables"]["cash_shifts"]["Row"];
       };
       close_cash_shift: {
-        Args: { p_counted_cash: number; p_closing_note?: string | null };
+        Args: { p_counted_cash: number; p_closing_note?: string | null; p_cashier_id?: string | null };
         Returns: Json;
       };
       create_staff_member: {
@@ -578,6 +578,23 @@ export type Database = {
           p_notes?: string | null;
           p_items?: Json;
         };
+        Returns: Json;
+      };
+      requisition_destination_allowed: { Args: { p_destination: string }; Returns: boolean };
+      get_inventory_requisition_catalog: { Args: Record<string, never>; Returns: Json };
+      create_inventory_requisition: {
+        Args: { p_destination: string; p_note?: string | null; p_items?: Json };
+        Returns: Json;
+      };
+      approve_inventory_requisition: { Args: { p_requisition_id: string; p_items?: Json }; Returns: Json };
+      reject_inventory_requisition: { Args: { p_requisition_id: string; p_rejection_reason: string }; Returns: Json };
+      cancel_inventory_requisition: { Args: { p_requisition_id: string }; Returns: Json };
+      issue_inventory_requisition: { Args: { p_requisition_id: string }; Returns: Json };
+      confirm_inventory_requisition_receipt: { Args: { p_requisition_id: string }; Returns: Json };
+      waste_destination_allowed: { Args: { p_destination: string }; Returns: boolean };
+      get_inventory_waste_catalog: { Args: { p_context?: string }; Returns: Json };
+      record_inventory_waste: {
+        Args: { p_context: string; p_destination?: string | null; p_note?: string | null; p_items?: Json };
         Returns: Json;
       };
       create_restaurant_order: {

@@ -43,19 +43,19 @@ export function TableSelector({
   const isSelectedOrderConfirming = readyOrder?.id === confirmingServedOrderId;
 
   function getDisplayStatus(table: RestaurantTable) {
-    if (table.status === "occupied" && table.hasBusyOrders) {
-      return {
-        label: "مشغولة",
-        detail: table.currentOrder?.roundNo && table.currentOrder.roundNo > 1 ? "طلب إضافي جديد" : "طلب قيد التحضير",
-        className: "border-[#ff5656]/30 bg-[#ff5656]/10 text-[#ff5656]",
-      };
-    }
-
     if (table.status === "occupied" && table.orders?.some((order) => order.status === "ready")) {
       return {
         label: "جاهز للتقديم",
         detail: table.currentOrder?.roundNo && table.currentOrder.roundNo > 1 ? `إضافة #${table.currentOrder.roundNo}` : null,
         className: "border-sky-200 bg-sky-50 text-sky-800",
+      };
+    }
+
+    if (table.status === "occupied" && table.hasBusyOrders) {
+      return {
+        label: "مشغولة",
+        detail: table.currentOrder?.roundNo && table.currentOrder.roundNo > 1 ? "طلب إضافي جديد" : "طلب قيد التحضير",
+        className: "border-[#ff5656]/30 bg-[#ff5656]/10 text-[#ff5656]",
       };
     }
 
@@ -109,15 +109,20 @@ export function TableSelector({
             </span>
           </div>
           {readyOrder ? (
-            <button
-              type="button"
-              onClick={() => onConfirmServed(selectedTable)}
-              disabled={isSelectedOrderConfirming}
-              className="captain-primary-button flex h-11 w-full items-center justify-center gap-2 text-sm font-bold disabled:cursor-not-allowed"
-            >
-              <CheckCircle2 size={17} />
-              {isSelectedOrderConfirming ? "جارٍ التأكيد..." : "تم تقديم الطلب"}
-            </button>
+            <>
+              <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-center text-sm font-bold text-sky-800">
+                {readyOrder.roundNo && readyOrder.roundNo > 1 ? `إضافة #${readyOrder.roundNo} جاهزة للتقديم` : "الطلب جاهز للتقديم"}
+              </p>
+              <button
+                type="button"
+                onClick={() => onConfirmServed(selectedTable)}
+                disabled={isSelectedOrderConfirming}
+                className="captain-primary-button flex h-11 w-full items-center justify-center gap-2 text-sm font-bold disabled:cursor-not-allowed"
+              >
+                <CheckCircle2 size={17} />
+                {isSelectedOrderConfirming ? "جارٍ التأكيد..." : "تم تقديم الطلب"}
+              </button>
+            </>
           ) : null}
         </div>
       ) : null}

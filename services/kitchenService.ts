@@ -9,17 +9,30 @@ type OrderRow = {
   round_no: number;
   table_id: number;
   captain_name: string;
-  status: "submitted" | "preparing" | "ready" | "served" | "awaiting_payment";
+  order_status: "submitted" | "preparing" | "ready";
+  status: "submitted" | "preparing" | "ready";
   received_at: string;
+  started_at: string | null;
+  ready_at: string | null;
+  general_notes: string | null;
+  has_other_station_pending: boolean;
   items: {
     id: string;
+    menu_item_id: string;
     name: string;
     quantity: number;
     note: string | null;
+    status: "submitted" | "preparing" | "ready";
+    preparation_station: "kitchen" | "barista" | "drinks" | "shisha";
+    sent_at: string;
+    started_at: string | null;
+    ready_at: string | null;
   }[];
 };
 
-function mapKitchenStatus(status: Exclude<OrderRow["status"], "served" | "awaiting_payment">): Exclude<KitchenOrderStatus, "served" | "cancelled"> {
+const kitchenStation = "kitchen";
+
+function mapKitchenStatus(status: OrderRow["status"]): Exclude<KitchenOrderStatus, "served" | "cancelled"> {
   if (status === "submitted") {
     return "new";
   }
@@ -29,16 +42,13 @@ function mapKitchenStatus(status: Exclude<OrderRow["status"], "served" | "awaiti
 
 export async function getKitchenOrders(): Promise<KitchenOrder[]> {
   const supabase = createClient();
-  const { data, error } = await supabase.rpc("get_kitchen_order_queue");
+  const { data, error } = await supabase.rpc("get_station_order_queue" as never, { p_station: kitchenStation } as never);
 
   if (error) {
     throw error;
   }
 
   return ((data ?? []) as unknown as OrderRow[])
-    .filter((order): order is OrderRow & { status: "submitted" | "preparing" | "ready" } =>
-      order.status === "submitted" || order.status === "preparing" || order.status === "ready",
-    )
     .map((order) => ({
       id: order.id,
       orderNumber: order.order_number,
@@ -46,23 +56,31 @@ export async function getKitchenOrders(): Promise<KitchenOrder[]> {
       tableId: order.table_id,
       captainName: order.captain_name,
       status: mapKitchenStatus(order.status),
+      aggregateStatus: order.order_status,
+      hasOtherStationPending: order.has_other_station_pending,
+      generalNotes: order.general_notes ?? undefined,
       priority: "normal",
       timing: {
         receivedAt: order.received_at,
+        startedAt: order.started_at ?? undefined,
+        readyAt: order.ready_at ?? undefined,
       },
       items: order.items.map((item) => ({
         id: item.id,
         name: item.name,
         quantity: item.quantity,
         note: item.note ?? undefined,
+        status: item.status,
+        preparationStation: item.preparation_station,
       })),
     }));
 }
 
 export async function updateKitchenOrderStatus(orderId: string, status: "preparing" | "ready") {
   const supabase = createClient();
-  const { error } = await supabase.rpc("update_kitchen_order_status", {
+  const { error } = await supabase.rpc("update_station_order_items_status" as never, {
     p_order_id: orderId,
+    p_station: kitchenStation,
     p_next_status: status,
   } as never);
 

@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BarChart3, Boxes, Home, Landmark, ShoppingCart, Truck, UsersRound } from "lucide-react";
+import { BarChart3, Boxes, Home, Landmark, ShoppingCart, Trash2, Truck, UsersRound, WalletCards } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -13,6 +13,8 @@ const navItems = [
   { href: "/owner/suppliers", label: "الموردون", icon: Truck },
   { href: "/owner/staff", label: "العمال", icon: UsersRound },
   { href: "/owner/inventory", label: "المخزون", icon: Boxes },
+  { href: "/owner/waste", label: "الهدر والتلف", icon: Trash2 },
+  { href: "/owner/cash-shifts", label: "ورديات الصندوق", icon: WalletCards },
   { href: "/owner/reports", label: "التقارير", icon: BarChart3 },
 ];
 

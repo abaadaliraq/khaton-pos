@@ -36,7 +36,9 @@ export function KitchenOrderDetails({ order, now, onClose }: KitchenOrderDetails
 
         <div className="mt-4 grid gap-2 text-base text-[#C9BEB2] sm:grid-cols-2">
           <span>الحالة: {kitchenStatusLabels[order.status]}</span>
+          {order.status === "ready" && order.hasOtherStationPending ? <span>حالة الطلب: بانتظار محطة أخرى</span> : null}
           <span>الكابتن: {order.captainName}</span>
+          {order.generalNotes ? <span className="sm:col-span-2">ملاحظات الطلب: {order.generalNotes}</span> : null}
           <span>وصل: {formatKitchenClock(order.timing.receivedAt)} / {formatElapsedTime(order.timing.receivedAt, now)}</span>
           <span>بدأ التحضير: {formatKitchenClock(order.timing.startedAt)}</span>
           <span>جاهز: {formatKitchenClock(order.timing.readyAt)}</span>

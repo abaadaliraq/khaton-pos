@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, LogOut, Maximize, Minimize, Volume2, VolumeX, Wifi } from "lucide-react";
+import { Clock, LogOut, Maximize, Minimize, PackagePlus, Trash2, Wifi } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OperationalBrand } from "@/components/operational/OperationalBrand";
@@ -9,9 +9,8 @@ import type { UserSession } from "@/types/auth";
 
 type KitchenHeaderProps = {
   session: UserSession;
-  soundEnabled: boolean;
-  soundNeedsActivation: boolean;
-  onToggleSound: () => void;
+  onOpenMaterialRequest: () => void;
+  onOpenWaste: () => void;
   onOpenCompleted: () => void;
   onAddDemoOrder: () => void;
   onResetDemoData: () => void;
@@ -36,9 +35,8 @@ function getDateTime() {
 
 export function KitchenHeader({
   session,
-  soundEnabled,
-  soundNeedsActivation,
-  onToggleSound,
+  onOpenMaterialRequest,
+  onOpenWaste,
   onOpenCompleted,
   onAddDemoOrder,
   onResetDemoData,
@@ -97,13 +95,17 @@ export function KitchenHeader({
           <button type="button" onClick={onOpenCompleted} className="h-11 rounded-lg bg-[#302B27] px-3 text-sm font-medium text-[#FFF8EE] hover:bg-[#3b3631]">
             الطلبات المكتملة
           </button>
-          <button type="button" onClick={onToggleSound} className="flex h-11 items-center gap-2 rounded-lg bg-[#302B27] px-3 text-sm text-[#FFF8EE] hover:bg-[#3b3631]">
-            {soundEnabled ? <Volume2 size={17} /> : <VolumeX size={17} />}
-            {soundNeedsActivation ? "اضغط لتفعيل الصوت" : soundEnabled ? "الصوت مفعل" : "الصوت مكتوم"}
+          <button type="button" onClick={onOpenMaterialRequest} className="flex h-11 items-center gap-2 rounded-lg border border-[#D88A3D]/40 bg-[#D88A3D]/15 px-3 text-sm font-semibold text-[#FFD7A8] hover:bg-[#D88A3D]/25">
+            <PackagePlus size={17} />
+            طلب مواد
+          </button>
+          <button type="button" onClick={onOpenWaste} className="flex h-11 items-center gap-2 rounded-lg border border-rose-300/30 bg-rose-500/10 px-3 text-sm font-semibold text-rose-100 hover:bg-rose-500/20">
+            <Trash2 size={17} />
+            تسجيل هدر
           </button>
           <button type="button" onClick={toggleFullscreen} className="flex h-11 items-center gap-2 rounded-lg bg-[#D88A3D] px-3 text-sm font-semibold text-[#171513] hover:bg-[#e29b54]">
             {isFullscreen ? <Minimize size={17} /> : <Maximize size={17} />}
-            ملء الشاشة
+            {isFullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"}
           </button>
           <button type="button" onClick={logout} className="flex h-11 items-center gap-2 rounded-lg border border-white/10 bg-[#24211E] px-3 text-sm text-[#FFF8EE] hover:bg-[#302B27]">
             <LogOut size={17} />

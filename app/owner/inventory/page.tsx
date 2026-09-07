@@ -4,7 +4,9 @@ import { Boxes, ClipboardList, PackageCheck, PackageX, Search, TrendingDown } fr
 import { useEffect, useMemo, useState } from "react";
 import { formatCurrency } from "@/lib/formatCurrency";
 import { getInventoryOverview } from "@/services/inventoryService";
-import type { InventoryItem, InventoryMovement, InventoryMovementType, InventoryUnitCode } from "@/types/inventory";
+import { getInventoryRequisitions } from "@/services/inventoryRequisitionService";
+import { getInventoryWasteReports } from "@/services/inventoryWasteService";
+import type { InventoryItem, InventoryMovement, InventoryMovementType, InventoryRequisition, InventoryUnitCode, InventoryWasteReport } from "@/types/inventory";
 
 type StockFilter = "all" | "low" | "out";
 type StockStatus = "normal" | "low" | "out";
@@ -19,6 +21,7 @@ const movementLabels: Record<InventoryMovementType, string> = {
   consumption: "استهلاك",
   waste: "هدر",
   return: "مرتجع",
+  stock_issue: "صرف داخلي",
 };
 
 const stockFilterOptions: { value: StockFilter; label: string }[] = [
@@ -121,6 +124,98 @@ function LoadingState() {
   );
 }
 
+function BaristaOverview({ requisitions, wasteReports }: { requisitions: InventoryRequisition[]; wasteReports: InventoryWasteReport[] }) {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: baghdadTimeZone });
+  const baristaRequisitions = requisitions.filter((request) => request.destination === "barista");
+  const baristaWasteReports = wasteReports.filter((report) => report.destination === "barista");
+  const todaysRequisitions = baristaRequisitions.filter((request) => new Date(request.requestedAt).toLocaleDateString("en-CA", { timeZone: baghdadTimeZone }) === today);
+  const pendingFollowUp = baristaRequisitions.filter((request) => ["pending", "approved", "issued"].includes(request.status));
+  const todaysWasteItems = baristaWasteReports
+    .filter((report) => new Date(report.postedAt).toLocaleDateString("en-CA", { timeZone: baghdadTimeZone }) === today)
+    .flatMap((report) => report.items);
+  const issuedLines = baristaRequisitions.flatMap((request) => request.items.filter((item) => item.issuedQuantityBase && item.issuedQuantityBase > 0));
+
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[#e4d8c8] bg-white p-4 shadow-sm">
+        <div>
+          <p className="text-sm text-[#7c6b60]">Department: Barista</p>
+          <h2 className="mt-1 font-semibold text-[#2f211c]">متابعة مواد الباريستا</h2>
+        </div>
+        <span className="rounded-md border border-[#d8c6b5] bg-[#fff8f0] px-3 py-2 text-sm font-semibold text-[#5d4032]">قراءة فقط</span>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard title="طلبات اليوم" value={formatNumber(todaysRequisitions.length)} icon={ClipboardList} />
+        <SummaryCard title="بانتظار متابعة" value={formatNumber(pendingFollowUp.length)} icon={PackageCheck} />
+        <SummaryCard title="أسطر مصروفة" value={formatNumber(issuedLines.length)} icon={Boxes} />
+        <SummaryCard title="هدر اليوم" value={formatNumber(todaysWasteItems.length)} icon={TrendingDown} />
+      </div>
+      <div className="grid gap-3 xl:grid-cols-2">
+        <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
+          <div className="border-b border-[#eee4d8] p-3">
+            <h3 className="font-semibold text-[#2f211c]">آخر طلبات مواد الباريستا</h3>
+          </div>
+          {baristaRequisitions.length === 0 ? <div className="p-3"><EmptyState message="لا توجد طلبات مواد باريستا ظاهرة حالياً." /></div> : null}
+          {baristaRequisitions.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[620px] text-right text-sm">
+                <thead className="bg-[#f5eee6] text-[#4a3b34]">
+                  <tr>
+                    <th className="px-3 py-2 font-semibold">رقم الطلب</th>
+                    <th className="px-3 py-2 font-semibold">الحالة</th>
+                    <th className="px-3 py-2 font-semibold">المواد</th>
+                    <th className="px-3 py-2 font-semibold">التاريخ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#eee4d8]">
+                  {baristaRequisitions.slice(0, 6).map((request) => (
+                    <tr key={request.id}>
+                      <td className="px-3 py-2 font-semibold text-[#2f211c]" dir="ltr">{request.requestCode}</td>
+                      <td className="px-3 py-2 text-[#4a3b34]">{request.status}</td>
+                      <td className="px-3 py-2 text-[#4a3b34]">{formatNumber(request.items.length)}</td>
+                      <td className="px-3 py-2 text-[#4a3b34]">{formatDateTime(request.requestedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </section>
+        <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
+          <div className="border-b border-[#eee4d8] p-3">
+            <h3 className="font-semibold text-[#2f211c]">آخر هدر الباريستا</h3>
+          </div>
+          {baristaWasteReports.length === 0 ? <div className="p-3"><EmptyState message="لا توجد عمليات هدر باريستا ظاهرة حالياً." /></div> : null}
+          {baristaWasteReports.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[620px] text-right text-sm">
+                <thead className="bg-[#f5eee6] text-[#4a3b34]">
+                  <tr>
+                    <th className="px-3 py-2 font-semibold">المادة</th>
+                    <th className="px-3 py-2 font-semibold">الكمية</th>
+                    <th className="px-3 py-2 font-semibold">طلب الصرف</th>
+                    <th className="px-3 py-2 font-semibold">التاريخ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#eee4d8]">
+                  {baristaWasteReports.flatMap((report) => report.items.map((item) => ({ report, item }))).slice(0, 6).map(({ report, item }) => (
+                    <tr key={`${report.id}-${item.id}`}>
+                      <td className="px-3 py-2 font-semibold text-[#2f211c]">{item.inventoryItemName}</td>
+                      <td className="px-3 py-2 text-rose-700">{formatQuantity(item.quantityBase, item.baseUnitCode)}</td>
+                      <td className="px-3 py-2 text-[#4a3b34]" dir="ltr">{item.requisitionCode ?? "-"}</td>
+                      <td className="px-3 py-2 text-[#4a3b34]">{formatDateTime(report.postedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </section>
+      </div>
+    </section>
+  );
+}
+
 function InventoryTable({ items }: { items: InventoryItem[] }) {
   return (
     <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
@@ -218,6 +313,8 @@ function RecentMovements({ movements }: { movements: InventoryMovement[] }) {
 export default function OwnerInventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  const [baristaRequisitions, setBaristaRequisitions] = useState<InventoryRequisition[]>([]);
+  const [baristaWasteReports, setBaristaWasteReports] = useState<InventoryWasteReport[]>([]);
   const [search, setSearch] = useState("");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
   const [isLoading, setIsLoading] = useState(true);
@@ -228,16 +325,30 @@ export default function OwnerInventoryPage() {
 
     async function loadInventory() {
       try {
-        const inventoryData = await getInventoryOverview();
+        const [inventoryData, requisitionsData, wasteReportsData] = await Promise.all([
+          getInventoryOverview(),
+          getInventoryRequisitions().catch((error) => {
+            console.warn("Owner barista requisitions overview is not available yet", error);
+            return [];
+          }),
+          getInventoryWasteReports().catch((error) => {
+            console.warn("Owner barista waste overview is not available yet", error);
+            return [];
+          }),
+        ]);
         if (!isMounted) return;
         setItems(inventoryData.items);
         setMovements(inventoryData.movements.slice(0, 10));
+        setBaristaRequisitions(requisitionsData.filter((request) => request.destination === "barista"));
+        setBaristaWasteReports(wasteReportsData.filter((report) => report.destination === "barista"));
         setErrorMessage("");
       } catch (error) {
         console.error("Failed to load owner inventory", error);
         if (!isMounted) return;
         setItems([]);
         setMovements([]);
+        setBaristaRequisitions([]);
+        setBaristaWasteReports([]);
         setErrorMessage("تعذر تحميل بيانات المخزون.");
       } finally {
         if (isMounted) setIsLoading(false);
@@ -319,6 +430,7 @@ export default function OwnerInventoryPage() {
             </div>
           </section>
 
+          <BaristaOverview requisitions={baristaRequisitions} wasteReports={baristaWasteReports} />
           <InventoryTable items={filteredItems} />
           <RecentMovements movements={movements} />
         </>

@@ -6,7 +6,9 @@ import { DashboardHero } from "@/components/dashboard/DashboardHero";
 import { RevenueBars } from "@/components/reports/SalesReportsDashboard";
 import { formatCurrency } from "@/lib/formatCurrency";
 import { getAdminSalesReport } from "@/services/adminReportService";
+import { getRecentCashShifts } from "@/services/financeService";
 import { getInventoryOverview } from "@/services/inventoryService";
+import { getInventoryWasteReports } from "@/services/inventoryWasteService";
 import { getOwnerFinanceData } from "@/services/ownerFinanceService";
 import { getPurchaseRequests } from "@/services/purchaseService";
 import type { DailyRevenuePoint, MenuItemSalesReport, SalesReportSummary } from "@/types/adminReports";
@@ -300,6 +302,8 @@ export default function OwnerPage() {
   const [outOfStockItems, setOutOfStockItems] = useState<InventoryItem[]>([]);
   const [stockDialog, setStockDialog] = useState<StockDialog>(null);
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
+  const [wasteTodayCount, setWasteTodayCount] = useState(0);
+  const [openCashShiftCount, setOpenCashShiftCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -308,7 +312,7 @@ export default function OwnerPage() {
 
     async function loadOverview() {
       try {
-        const [todayReport, yesterdayReport, monthReport, sevenDaysReport, financeData, inventoryData, purchaseRequests] = await Promise.all([
+        const [todayReport, yesterdayReport, monthReport, sevenDaysReport, financeData, inventoryData, purchaseRequests, wasteReports, cashShifts] = await Promise.all([
           getAdminSalesReport({ from: today, to: today, today }),
           getAdminSalesReport({ from: yesterday, to: yesterday, today }),
           getAdminSalesReport({ from: monthFrom, to: today, today }),
@@ -316,6 +320,8 @@ export default function OwnerPage() {
           getOwnerFinanceData(),
           getInventoryOverview(),
           getPurchaseRequests(),
+          getInventoryWasteReports(),
+          getRecentCashShifts(),
         ]);
 
         if (!isMounted) return;
@@ -349,6 +355,8 @@ export default function OwnerPage() {
         setLowStockItems(lowInventoryItems);
         setOutOfStockItems(outInventoryItems);
         setPendingRequestCount(purchaseRequests.filter((request) => request.status === "pending").length);
+        setWasteTodayCount(wasteReports.filter((report) => new Date(report.postedAt).toLocaleDateString("en-CA", { timeZone: baghdadTimeZone }) === today).length);
+        setOpenCashShiftCount(cashShifts.filter((shift) => shift.status === "open").length);
         setErrorMessage(financeData.errors.length > 0 ? "تعذر تحميل بعض مؤشرات لوحة المالك." : "");
       } catch (error) {
         console.error("Failed to load owner overview", error);
@@ -399,6 +407,8 @@ export default function OwnerPage() {
             <KpiCard title="مواد منخفضة" value={formatNumber(lowStockCount)} helper="اضغط لعرض المواد المنخفضة" icon={AlertTriangle} onClick={() => setStockDialog("low")} />
             <KpiCard title="مواد نافدة" value={formatNumber(outOfStockCount)} helper="اضغط لعرض المواد النافدة" icon={Boxes} onClick={() => setStockDialog("out")} />
             <KpiCard title="طلبات تحتاج متابعة" value={formatNumber(pendingRequestCount)} helper="طلبات شراء Pending" icon={ClipboardList} />
+            <KpiCard title="هدر اليوم" value={formatNumber(wasteTodayCount)} helper="اضغط لفتح سجل الهدر والتلف" icon={AlertTriangle} onClick={() => { window.location.href = "/owner/waste"; }} />
+            <KpiCard title="ورديات صندوق مفتوحة" value={formatNumber(openCashShiftCount)} helper="اضغط لإدارة ورديات الكاشير" icon={WalletCards} onClick={() => { window.location.href = "/owner/cash-shifts"; }} />
           </section>
 
           <section className="rounded-md border border-white/[0.08] bg-[#343434] p-4 shadow-[0_18px_34px_rgba(0,0,0,0.14)]">

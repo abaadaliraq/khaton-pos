@@ -1,10 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f7f4ed;
-  --foreground: #1c1917;
+  --background: #f5f0e8;
+  --foreground: #181818;
   --khatoun-red: #ff5656;
   --khatoun-dark-bg: #2b2b2b;
+  --kh-page: #f5f0e8;
+  --kh-surface: #fffdf8;
+  --kh-surface-alt: #f0e7dc;
+  --kh-border: #d4c5b4;
+  --kh-border-strong: #aa9784;
+  --kh-text: #181818;
+  --kh-muted: #51483f;
+  --kh-accent: #c83333;
+  --kh-danger: #b42318;
+  --kh-success: #047857;
+  --kh-warning: #b45309;
+  --kh-info: #2563eb;
 }
 
 @theme inline {
@@ -122,16 +134,16 @@ button:disabled {
 }
 
 .management-shell {
-  --management-bg: #292929;
-  --management-sidebar: #202020;
-  --management-card: #343434;
-  --management-card-soft: #303030;
-  --management-border: rgba(255, 255, 255, 0.08);
-  --management-border-strong: rgba(255, 255, 255, 0.14);
-  --management-text: #ffffff;
-  --management-muted: #d4d4d8;
-  --management-soft: #a1a1aa;
-  --management-accent: var(--khatoun-red);
+  --management-bg: var(--kh-page);
+  --management-sidebar: var(--kh-surface-alt);
+  --management-card: var(--kh-surface);
+  --management-card-soft: #f8f2ea;
+  --management-border: var(--kh-border);
+  --management-border-strong: var(--kh-border-strong);
+  --management-text: var(--kh-text);
+  --management-muted: var(--kh-muted);
+  --management-soft: #6b6258;
+  --management-accent: var(--kh-accent);
   min-height: 100vh;
   background: var(--management-bg);
   color: var(--management-text);
@@ -144,7 +156,7 @@ button:disabled {
 
 .management-shell :where(header) {
   border-color: var(--management-border);
-  background: rgba(32, 32, 32, 0.96);
+  background: rgba(255, 253, 248, 0.97);
   color: var(--management-text);
 }
 
@@ -159,15 +171,15 @@ button:disabled {
 .management-content :where(section.rounded-md, article.rounded-md),
 .management-shell :where(.admin-dark-panel) {
   background: var(--management-card);
-  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.14);
+  box-shadow: none;
 }
 
-.management-shell :where(.bg-white, .bg-\[\#fffdfa\], .bg-\[\#fbfaf7\], .bg-\[\#fbf7f1\], .bg-\[\#f8f3ed\]) {
+.management-shell :where(.bg-white, .bg-\[\#fffdfa\], .bg-\[\#fbfaf7\], .bg-\[\#fbf7f1\], .bg-\[\#f8f3ed\], .bg-\[\#303030\], .bg-\[\#343434\]) {
   background: var(--management-card) !important;
 }
 
-.management-shell :where(.bg-\[\#f5eee6\], .bg-\[\#efe7dc\], .bg-\[\#eee4d8\], .bg-\[\#fffaf4\]) {
-  background: var(--management-card-soft) !important;
+.management-shell :where(.bg-\[\#292929\], .bg-\[\#202020\], .bg-\[\#f5eee6\], .bg-\[\#efe7dc\], .bg-\[\#eee4d8\], .bg-\[\#fffaf4\]) {
+  background: var(--kh-surface-alt) !important;
 }
 
 .management-shell :where(.bg-emerald-50, .bg-amber-50, .bg-rose-50) {
@@ -186,7 +198,7 @@ button:disabled {
   border-color: var(--management-border) !important;
 }
 
-.management-shell :where(.text-\[\#2f211c\], .text-\[\#4a3b34\], .text-stone-950) {
+.management-shell :where(.text-\[\#2f211c\], .text-\[\#4a3b34\], .text-stone-950, .text-white) {
   color: var(--management-text) !important;
 }
 
@@ -199,8 +211,154 @@ button:disabled {
 }
 
 .management-shell :where(table thead, thead.bg-\[\#f5eee6\]) {
-  background: rgba(255, 255, 255, 0.04);
-  color: #d4d4d8;
+  background: #e8dccd;
+  color: var(--kh-text);
+}
+
+.management-shell :where(table thead, table thead *) {
+  color: var(--kh-text) !important;
+}
+
+.management-shell :where(table tbody tr) {
+  background: #ffffff;
+}
+
+.management-shell :where(table tbody tr:nth-child(even)) {
+  background: #fffdfa;
+}
+
+.management-shell :where(table tbody td) {
+  border-bottom: 1px solid #d9cbbb !important;
+  border-left: 1px solid #d9cbbb !important;
+  color: #1f1713 !important;
+}
+
+.management-shell :where(table thead th) {
+  border-bottom: 1px solid #bba997 !important;
+  border-left: 1px solid #c8b7a5 !important;
+}
+
+.management-shell :where(table tbody td:last-child, table thead th:last-child) {
+  border-left: 0 !important;
+}
+
+.management-shell :where(table tbody td.sticky, table thead th.sticky) {
+  border-left: 1px solid #bda995 !important;
+  box-shadow: -1px 0 0 #bda995;
+}
+
+.management-shell table tbody :where(
+  .text-\[\#2f211c\],
+  .text-\[\#4a3b34\],
+  .text-\[\#7c6b60\],
+  .text-\[\#8a6a56\],
+  .text-\[\#9a8779\],
+  .text-zinc-400
+) {
+  color: #1f1713 !important;
+}
+
+.management-shell table tbody :where(.text-emerald-700, .text-emerald-800) {
+  color: #046c4e !important;
+}
+
+.management-shell table tbody :where(.text-rose-700, .text-rose-800) {
+  color: #be123c !important;
+}
+
+.management-shell table tbody :where(.text-amber-700, .text-amber-800) {
+  color: #92400e !important;
+}
+
+.management-shell :where(.bg-\[\#ff5656\], button.bg-\[\#ff5656\], a.bg-\[\#ff5656\]) {
+  color: #ffffff !important;
+}
+
+.management-shell :where(.bg-\[\#ff5656\] *) {
+  color: #ffffff !important;
+}
+
+.management-shell :where(.dashboard-hero) {
+  min-height: 92px !important;
+  max-height: 110px;
+  border-bottom: 1px solid var(--kh-border);
+}
+
+.management-shell :where(.dashboard-hero h1) {
+  font-size: 24px !important;
+  line-height: 1.2 !important;
+}
+
+.management-shell :where(.dashboard-hero p) {
+  color: #ffffff !important;
+}
+
+.management-top-nav {
+  background: rgba(245, 240, 232, 0.96);
+  border-color: var(--kh-border);
+  backdrop-filter: blur(12px);
+}
+
+.management-nav-link {
+  display: inline-flex;
+  height: 36px;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--kh-border);
+  border-radius: 6px;
+  background: var(--kh-surface);
+  color: var(--kh-text);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 750;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.management-nav-link svg {
+  color: var(--kh-accent);
+}
+
+.management-nav-link:hover {
+  border-color: var(--kh-accent);
+  background: #fff7f1;
+}
+
+.management-nav-link.is-active {
+  border-color: var(--kh-accent);
+  background: var(--kh-accent);
+  color: #ffffff;
+}
+
+.management-nav-link.is-active svg {
+  color: #ffffff;
+}
+
+.management-action-button {
+  display: inline-flex;
+  height: 40px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--kh-border);
+  border-radius: 6px;
+  background: var(--kh-surface);
+  color: var(--kh-text);
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.management-action-button:hover {
+  border-color: var(--kh-accent);
+  background: #fff7f1;
+}
+
+.management-shell table {
+  border-collapse: collapse;
+}
+
+.management-shell :where(table tbody tr:hover) {
+  background: #fff3e8 !important;
 }
 
 .management-shell :where(tbody tr) {
@@ -208,12 +366,12 @@ button:disabled {
 }
 
 .management-shell :where(tbody tr:hover) {
-  background: rgba(255, 255, 255, 0.05) !important;
+  background: #fff4eb !important;
 }
 
 .management-shell :where(input, select, textarea) {
   border-color: var(--management-border) !important;
-  background: #2f2f2f !important;
+  background: var(--kh-surface) !important;
   color: var(--management-text) !important;
   transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, color 160ms ease;
 }
@@ -241,7 +399,7 @@ button:disabled {
 }
 
 .management-shell :where(.shadow-sm, .shadow-xl) {
-  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.14) !important;
+  box-shadow: none !important;
 }
 
 .management-tabs {
@@ -249,20 +407,20 @@ button:disabled {
   gap: 8px;
   overflow-x: auto;
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--kh-border);
   border-radius: 6px;
-  background: #2f2f2f;
+  background: var(--kh-surface);
   padding: 8px;
-  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.14);
+  box-shadow: none;
 }
 
 .management-tab {
   min-height: 40px;
   flex-shrink: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--kh-border);
   border-radius: 6px;
-  background: #333333;
-  color: #f2f2f2;
+  background: var(--kh-surface);
+  color: var(--kh-text);
   padding: 0 16px;
   font-size: 14px;
   font-weight: 600;
@@ -271,10 +429,10 @@ button:disabled {
 }
 
 .management-tab:hover:not(:disabled):not([data-active="true"]) {
-  border-color: rgba(255, 86, 86, 0.35);
-  background: #3d3d3d;
-  color: #ffffff;
-  transform: translateY(-1px);
+  border-color: var(--kh-accent);
+  background: #fff7f1;
+  color: var(--kh-text);
+  transform: none;
 }
 
 .management-tab:focus-visible {
@@ -282,18 +440,18 @@ button:disabled {
 }
 
 .management-tab[data-active="true"] {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: var(--khatoun-red);
+  border-color: var(--kh-accent);
+  background: var(--kh-accent);
   color: #ffffff;
   font-weight: 700;
-  box-shadow: 0 4px 14px rgba(255, 86, 86, 0.18);
+  box-shadow: none;
 }
 
 .management-tab:disabled {
   cursor: not-allowed;
-  border-color: rgba(255, 255, 255, 0.06);
-  background: #292929;
-  color: #777777;
+  border-color: #e3d7ca;
+  background: #eee5da;
+  color: #8a8178;
   opacity: 0.65;
   transform: none;
   box-shadow: none;

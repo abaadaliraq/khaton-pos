@@ -209,6 +209,7 @@ export type CashShiftStatus = "open" | "closed";
 export type CashShift = {
   id: string;
   cashierId: string;
+  cashierName?: string;
   businessDate: string;
   openedAt: string;
   closedAt: string | null;
@@ -220,16 +221,26 @@ export type CashShift = {
   openingNote: string | null;
   closingNote: string | null;
   openedBy: string;
+  openedByName?: string;
   closedBy: string | null;
+  closedByName?: string;
   createdAt: string;
 };
 
+export type CashierOption = {
+  id: string;
+  name: string;
+  username: string;
+};
+
 export type OpenCashShiftInput = {
+  cashierId: string;
   openingCash: number;
   openingNote?: string;
 };
 
 export type CloseCashShiftInput = {
+  cashierId?: string;
   countedCash: number;
   closingNote?: string;
 };
@@ -254,6 +265,12 @@ export type ExpectedCashBreakdown = {
 export type CashShiftSummary = {
   shift: CashShift;
   expected: ExpectedCashBreakdown;
+};
+
+export type CashShiftMovementSummary = {
+  shiftId: string;
+  cashIn: number;
+  cashOut: number;
 };
 
 export const expenseCategoryLabels: Record<ExpenseCategory, string> = {

@@ -16,6 +16,8 @@ export type KitchenOrderItem = {
   name: string;
   quantity: number;
   note?: string;
+  status: "submitted" | "preparing" | "ready";
+  preparationStation: "kitchen" | "barista" | "drinks" | "shisha";
 };
 
 export type KitchenOrder = {
@@ -25,13 +27,19 @@ export type KitchenOrder = {
   tableId: number;
   captainName: string;
   status: KitchenOrderStatus;
+  aggregateStatus: "submitted" | "preparing" | "ready";
+  hasOtherStationPending: boolean;
+  generalNotes?: string;
   priority: KitchenOrderPriority;
   timing: KitchenOrderTiming;
   items: KitchenOrderItem[];
 };
 
-export type KitchenOrderSeed = Omit<KitchenOrder, "timing" | "roundNo"> & {
+export type KitchenOrderSeed = Omit<KitchenOrder, "timing" | "roundNo" | "aggregateStatus" | "hasOtherStationPending" | "items"> & {
   roundNo?: number;
+  aggregateStatus?: "submitted" | "preparing" | "ready";
+  hasOtherStationPending?: boolean;
+  items: (Omit<KitchenOrderItem, "status" | "preparationStation"> & Partial<Pick<KitchenOrderItem, "status" | "preparationStation">>)[];
   receivedMinutesAgo: number;
   startedMinutesAgo?: number;
   readyMinutesAgo?: number;

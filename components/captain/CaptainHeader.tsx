@@ -1,5 +1,6 @@
 import { Clock, LogOut, Moon, Sun, UserRound, Volume2, VolumeX } from "lucide-react";
 import { OperationalBrand } from "@/components/operational/OperationalBrand";
+import { FullscreenButton } from "@/components/ui/FullscreenButton";
 
 type CaptainHeaderProps = {
   currentTime: string;
@@ -48,6 +49,7 @@ export function CaptainHeader({ currentTime, theme, soundEnabled, soundNeedsActi
             <span className="hidden sm:inline">الكابتن أحمد</span>
             <span className="sm:hidden">أحمد</span>
           </div>
+          <FullscreenButton className="captain-control flex h-10 items-center gap-2 px-3 text-sm font-medium" />
           <button
             type="button"
             onClick={onLogout}

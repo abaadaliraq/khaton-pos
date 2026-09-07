@@ -4,6 +4,7 @@ type DashboardHeroProps = {
   description: string;
   image?: string;
   imagePosition?: string;
+  height?: string;
   className?: string;
 };
 
@@ -15,6 +16,7 @@ export function DashboardHero({
   description,
   image = defaultHeroImage,
   imagePosition = "center",
+  height = "clamp(180px, 22vw, 330px)",
   className = "",
 }: DashboardHeroProps) {
   return (
@@ -25,7 +27,7 @@ export function DashboardHero({
         backgroundPosition: imagePosition,
         backgroundRepeat: "no-repeat",
         backgroundSize: "cover",
-        height: "clamp(180px, 22vw, 330px)",
+        height,
       }}
     >
       <div className="relative z-10 max-w-xl text-right">

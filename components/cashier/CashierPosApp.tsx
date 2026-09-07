@@ -53,6 +53,17 @@ function persistUnreadAdditionIds(ids: Set<string>) {
   window.sessionStorage.setItem(unreadAdditionsStorageKey, JSON.stringify([...ids]));
 }
 
+function paymentErrorMessage(error: unknown) {
+  const text = JSON.stringify(error).toLowerCase();
+  if (text.includes("stale_cash_shift_must_close")) {
+    return "يوجد صندوق مفتوح من يوم سابق. يجب إغلاقه قبل تسجيل دفع نقدي جديد.";
+  }
+  if (text.includes("cash_shift_required")) {
+    return "لا توجد وردية صندوق مفتوحة لهذا الكاشير. يرجى فتح وردية للكاشير من واجهة المالية.";
+  }
+  return "تعذر تسجيل الدفع. لم يتم إجراء أي تغيير.";
+}
+
 export function CashierPosApp({ session }: CashierPosAppProps) {
   const [tables, setTables] = useState<CashierTable[]>([]);
   const [unreadAdditionIds, setUnreadAdditionIds] = useState<Set<string>>(() => loadUnreadAdditionIds());
@@ -376,7 +387,7 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
         });
       }
 
-      showMessage("تعذر تسجيل الدفع. لم يتم إجراء أي تغيير.");
+      showMessage(paymentErrorMessage(error));
       return false;
     } finally {
       paymentSubmittingOrderRef.current = null;
