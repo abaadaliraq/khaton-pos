@@ -1,16 +1,17 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowUp, Boxes, ClipboardList, Minus, ReceiptText, ShoppingCart, TrendingUp, WalletCards, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, Boxes, ClipboardList, Minus, ReceiptText, ShoppingCart, TrendingUp, WalletCards, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DashboardHero } from "@/components/dashboard/DashboardHero";
 import { RevenueBars } from "@/components/reports/SalesReportsDashboard";
 import { formatCurrency } from "@/lib/formatCurrency";
 import { getAdminSalesReport } from "@/services/adminReportService";
 import { getRecentCashShifts } from "@/services/financeService";
+import { getInventoryAnalytics } from "@/services/inventoryAnalyticsService";
 import { getInventoryOverview } from "@/services/inventoryService";
 import { getInventoryWasteReports } from "@/services/inventoryWasteService";
 import { getOwnerFinanceData } from "@/services/ownerFinanceService";
-import { getPurchaseRequests } from "@/services/purchaseService";
+import { getPurchaseRequests, getPurchases } from "@/services/purchaseService";
 import type { DailyRevenuePoint, MenuItemSalesReport, SalesReportSummary } from "@/types/adminReports";
 import type { InventoryItem, InventoryUnitCode } from "@/types/inventory";
 
@@ -72,6 +73,10 @@ function formatQuantity(quantity: number, unitCode: InventoryUnitCode) {
   };
 
   return `${new Intl.NumberFormat("ar-IQ", { maximumFractionDigits: 3 }).format(quantity)} ${labels[unitCode]}`;
+}
+
+function formatLocalDateTime(value: string) {
+  return new Date(value).toLocaleDateString("en-CA", { timeZone: baghdadTimeZone });
 }
 
 function comparisonPercent(current: number, previous: number) {
@@ -304,6 +309,12 @@ export default function OwnerPage() {
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
   const [wasteTodayCount, setWasteTodayCount] = useState(0);
   const [openCashShiftCount, setOpenCashShiftCount] = useState(0);
+  const [receivedToday, setReceivedToday] = useState(0);
+  const [todayExpenses, setTodayExpenses] = useState(0);
+  const [todayPurchases, setTodayPurchases] = useState(0);
+  const [cashShiftDifferenceCount, setCashShiftDifferenceCount] = useState(0);
+  const [topWasteDepartment, setTopWasteDepartment] = useState("لا توجد بيانات");
+  const [topConsumedMaterial, setTopConsumedMaterial] = useState("لا توجد بيانات");
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -312,7 +323,7 @@ export default function OwnerPage() {
 
     async function loadOverview() {
       try {
-        const [todayReport, yesterdayReport, monthReport, sevenDaysReport, financeData, inventoryData, purchaseRequests, wasteReports, cashShifts] = await Promise.all([
+        const [todayReport, yesterdayReport, monthReport, sevenDaysReport, financeData, inventoryData, purchaseRequests, purchases, wasteReports, cashShifts, inventoryAnalytics] = await Promise.all([
           getAdminSalesReport({ from: today, to: today, today }),
           getAdminSalesReport({ from: yesterday, to: yesterday, today }),
           getAdminSalesReport({ from: monthFrom, to: today, today }),
@@ -320,8 +331,10 @@ export default function OwnerPage() {
           getOwnerFinanceData(),
           getInventoryOverview(),
           getPurchaseRequests(),
+          getPurchases(),
           getInventoryWasteReports(),
           getRecentCashShifts(),
+          getInventoryAnalytics({ startDate: today, endDate: today }),
         ]);
 
         if (!isMounted) return;
@@ -338,6 +351,21 @@ export default function OwnerPage() {
         const lowInventoryItems = activeInventoryItems.filter((item) => stockStatus(item) === "low");
         const outInventoryItems = activeInventoryItems.filter((item) => stockStatus(item) === "out");
         const stockValue = activeInventoryItems.reduce((total, item) => total + item.stockOnHand * item.averageCost, 0);
+        const todayExpenseTotal = financeData.expenses
+          .filter((expense) => expense.expenseDate === today)
+          .reduce((total, expense) => total + expense.amount, 0);
+        const todayPurchaseTotal = purchases
+          .filter((purchase) => formatLocalDateTime(purchase.createdAt) === today)
+          .reduce((total, purchase) => total + purchase.totalAmount, 0);
+        const todayWasteReports = wasteReports.filter((report) => formatLocalDateTime(report.postedAt) === today);
+        const wasteByDestination = new Map<string, number>();
+        todayWasteReports.forEach((report) => {
+          const destination = report.destination ? report.destination : report.context === "warehouse" ? "المخزن" : "قسم غير محدد";
+          wasteByDestination.set(destination, (wasteByDestination.get(destination) ?? 0) + report.items.length);
+        });
+        const mostConsumed = [...inventoryAnalytics.items]
+          .map((item) => ({ item, quantity: item.recipeConsumption.quantity + item.issues.quantity }))
+          .sort((a, b) => b.quantity - a.quantity)[0];
 
         setTodaySummary(todayReport.summary);
         setYesterdaySummary(yesterdayReport.summary);
@@ -355,8 +383,14 @@ export default function OwnerPage() {
         setLowStockItems(lowInventoryItems);
         setOutOfStockItems(outInventoryItems);
         setPendingRequestCount(purchaseRequests.filter((request) => request.status === "pending").length);
-        setWasteTodayCount(wasteReports.filter((report) => new Date(report.postedAt).toLocaleDateString("en-CA", { timeZone: baghdadTimeZone }) === today).length);
+        setWasteTodayCount(todayWasteReports.length);
         setOpenCashShiftCount(cashShifts.filter((shift) => shift.status === "open").length);
+        setReceivedToday(todayReport.paymentMethods.reduce((total, method) => total + method.revenue, 0));
+        setTodayExpenses(todayExpenseTotal);
+        setTodayPurchases(todayPurchaseTotal);
+        setCashShiftDifferenceCount(cashShifts.filter((shift) => shift.status === "closed" && shift.businessDate === today && typeof shift.cashDifference === "number" && shift.cashDifference !== 0).length);
+        setTopWasteDepartment([...wasteByDestination.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "لا توجد بيانات");
+        setTopConsumedMaterial(mostConsumed && mostConsumed.quantity > 0 ? `${mostConsumed.item.nameAr} / ${formatQuantity(mostConsumed.quantity, mostConsumed.item.baseUnitCode)}` : "لا توجد بيانات");
         setErrorMessage(financeData.errors.length > 0 ? "تعذر تحميل بعض مؤشرات لوحة المالك." : "");
       } catch (error) {
         console.error("Failed to load owner overview", error);
@@ -400,7 +434,10 @@ export default function OwnerPage() {
         <>
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <KpiCard title="مبيعات اليوم" value={formatCurrency(todaySummary.revenue)} helper="مقارنة بأمس" icon={TrendingUp} current={todaySummary.revenue} previous={yesterdaySummary.revenue} />
+            <KpiCard title="المقبوض اليوم" value={formatCurrency(receivedToday)} helper="حسب طرق الدفع المكتملة" icon={ReceiptText} />
             <KpiCard title="مبيعات هذا الشهر" value={formatCurrency(monthSummary.revenue)} helper="مقارنة بالشهر السابق" icon={ReceiptText} current={monthSummary.revenue} previous={previousMonthSummary.revenue} />
+            <KpiCard title="مصروفات اليوم" value={formatCurrency(todayExpenses)} helper="من سجل المصروفات" icon={WalletCards} />
+            <KpiCard title="مشتريات اليوم" value={formatCurrency(todayPurchases)} helper="من أوامر الشراء المسجلة" icon={ShoppingCart} />
             <KpiCard title="مصروفات هذا الشهر" value={formatCurrency(monthExpenses)} helper="مقارنة بالشهر السابق" icon={WalletCards} current={monthExpenses} previous={previousMonthExpenses} higherIsGood={false} />
             <KpiCard title="مستحقات الموردين" value={formatCurrency(supplierDues)} helper={`${formatNumber(unpaidPurchaseCount)} فواتير غير مدفوعة`} icon={ShoppingCart} />
             <KpiCard title="قيمة المخزون الحالية" value={formatCurrency(inventoryValue)} helper="حسب متوسط التكلفة الحالي" icon={Boxes} />
@@ -408,7 +445,10 @@ export default function OwnerPage() {
             <KpiCard title="مواد نافدة" value={formatNumber(outOfStockCount)} helper="اضغط لعرض المواد النافدة" icon={Boxes} onClick={() => setStockDialog("out")} />
             <KpiCard title="طلبات تحتاج متابعة" value={formatNumber(pendingRequestCount)} helper="طلبات شراء Pending" icon={ClipboardList} />
             <KpiCard title="هدر اليوم" value={formatNumber(wasteTodayCount)} helper="اضغط لفتح سجل الهدر والتلف" icon={AlertTriangle} onClick={() => { window.location.href = "/owner/waste"; }} />
+            <KpiCard title="أكثر قسم هدر اليوم" value={topWasteDepartment} helper="حسب عدد مواد الهدر المسجلة" icon={BarChart3} />
+            <KpiCard title="أكثر مادة استهلاكاً اليوم" value={topConsumedMaterial} helper="وصفات + صرف داخلي، دون خلط وحدات" icon={BarChart3} />
             <KpiCard title="ورديات صندوق مفتوحة" value={formatNumber(openCashShiftCount)} helper="اضغط لإدارة ورديات الكاشير" icon={WalletCards} onClick={() => { window.location.href = "/owner/cash-shifts"; }} />
+            <KpiCard title="فروقات ورديات اليوم" value={formatNumber(cashShiftDifferenceCount)} helper="ورديات مغلقة بفرق نقدي" icon={WalletCards} onClick={() => { window.location.href = "/owner/cash-shifts"; }} />
           </section>
 
           <section className="rounded-md border border-white/[0.08] bg-[#343434] p-4 shadow-[0_18px_34px_rgba(0,0,0,0.14)]">

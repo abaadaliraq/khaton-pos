@@ -1,5 +1,5 @@
-import { SalesReportsDashboard } from "@/components/reports/SalesReportsDashboard";
+import { ReportsCenter } from "@/components/reports/ReportsCenter";
 
 export default function OwnerReportsPage() {
-  return <SalesReportsDashboard variant="owner" />;
+  return <ReportsCenter audience="owner" />;
 }

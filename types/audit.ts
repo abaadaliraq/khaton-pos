@@ -15,6 +15,7 @@ export type AuditLog = {
   entityId: string | null;
   oldData: Json | null;
   newData: Json | null;
+  references: Record<string, string>;
   createdAt: string;
 };
 

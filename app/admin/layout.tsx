@@ -4,7 +4,7 @@ import { ReactNode } from "react";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { ManagementTopNav } from "@/components/ui/ManagementTopNav";
-import { ClipboardList, Home, Settings, Table2, Trash2, UsersRound, Utensils, WalletCards } from "lucide-react";
+import { BarChart3, ClipboardList, Home, Settings, Table2, Trash2, UsersRound, Utensils, WalletCards } from "lucide-react";
 
 const navItems = [
   { href: "/admin", label: "الرئيسية", icon: Home },
@@ -13,6 +13,7 @@ const navItems = [
   { href: "/admin/tables", label: "الطاولات", icon: Table2 },
   { href: "/admin/waste", label: "الهدر والتلف", icon: Trash2 },
   { href: "/admin/cash-shifts", label: "ورديات الصندوق", icon: WalletCards },
+  { href: "/admin/reports", label: "التقارير", icon: BarChart3 },
   { href: "/admin/audit", label: "سجل العمليات", icon: ClipboardList },
   { href: "/admin/settings", label: "الإعدادات", icon: Settings },
 ];

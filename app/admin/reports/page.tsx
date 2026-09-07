@@ -1,5 +1,5 @@
-import { AdminReportsDashboard } from "@/components/admin/AdminReportsDashboard";
+import { ReportsCenter } from "@/components/reports/ReportsCenter";
 
 export default function AdminReportsPage() {
-  return <AdminReportsDashboard />;
+  return <ReportsCenter audience="admin" />;
 }
