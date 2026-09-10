@@ -34,7 +34,13 @@ function formatPercent(value: number | null) {
 
 function formatMinutes(value: number | null) {
   if (value === null) return "بيانات غير كافية";
-  return `${formatNumber(value)} دقيقة`;
+  const totalSeconds = Math.round(value * 60);
+  if (totalSeconds < 60) return `${formatNumber(totalSeconds)} ثانية`;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${formatNumber(hours)} ساعة${minutes > 0 ? ` و${formatNumber(minutes)} دقيقة` : ""}`;
+  return `${formatNumber(minutes)} دقيقة${seconds > 0 ? ` و${formatNumber(seconds)} ثانية` : ""}`;
 }
 
 function comparisonText(metric: AiMetricComparison, formatter: (value: number) => string = formatNumber) {
@@ -172,9 +178,11 @@ function OperationalMetricsTables({ metrics }: { metrics: AiOperationalMetrics }
                 <th className="px-3 py-3 font-semibold">المسار</th>
                 <th className="px-3 py-3 font-semibold">المتوسط</th>
                 <th className="px-3 py-3 font-semibold">الوسيط</th>
+                <th className="px-3 py-3 font-semibold">أقل / أعلى</th>
                 <th className="px-3 py-3 font-semibold">العينات</th>
-                <th className="px-3 py-3 font-semibold">الحالات المتأخرة</th>
+                <th className="px-3 py-3 font-semibold">الشذوذ</th>
                 <th className="px-3 py-3 font-semibold">مقارنة بالفترة السابقة</th>
+                <th className="px-3 py-3 font-semibold">ملاحظة البيانات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#eee4d8]">
@@ -183,9 +191,11 @@ function OperationalMetricsTables({ metrics }: { metrics: AiOperationalMetrics }
                   <td className="px-3 py-3 font-semibold text-[#2f211c]">{row.label}</td>
                   <td className="px-3 py-3">{formatMinutes(row.averageMinutes)}</td>
                   <td className="px-3 py-3">{formatMinutes(row.medianMinutes)}</td>
+                  <td className="px-3 py-3">{formatMinutes(row.minMinutes)} / {formatMinutes(row.maxMinutes)}</td>
                   <td className="px-3 py-3">{formatNumber(row.samples)}</td>
-                  <td className="px-3 py-3">{formatNumber(row.delayedCount)}</td>
-                  <td className="px-3 py-3">{row.previousAverageMinutes === null ? "لا توجد مقارنة" : `${formatMinutes(row.previousAverageMinutes)} (${formatPercent(row.changePercent)})`}</td>
+                  <td className="px-3 py-3">{formatNumber(row.outlierCount)} غير اعتيادي / {formatNumber(row.suspiciousFastCount)} سريع جداً</td>
+                  <td className="px-3 py-3">{row.previousMedianMinutes === null ? "لا توجد مقارنة" : `${formatMinutes(row.previousMedianMinutes)} (${formatPercent(row.changePercent)})`}</td>
+                  <td className="whitespace-normal px-3 py-3 leading-6">{row.note}</td>
                 </tr>
               ))}
             </tbody>

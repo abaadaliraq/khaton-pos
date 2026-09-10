@@ -417,17 +417,54 @@ function tableLabel(table: RestaurantTableRow | undefined, tableId: string) {
   return table.name?.trim() || `طاولة ${table.table_number}`;
 }
 
-function durationMetric(label: string, currentValues: number[], previousValues: number[], delayedThresholdMinutes: number): AiSpeedMetric {
+function speedMetricNote(samples: number, suspiciousFastCount: number, outlierCount: number) {
+  if (samples === 0) return "لا توجد عينات مكتملة لهذه المرحلة.";
+  if (samples < 5) return "العينة قليلة ولا تكفي للحكم على الأداء.";
+  if (suspiciousFastCount > 0) return "توجد مدد قصيرة جداً قد تكون نتيجة بيانات اختبار أو تحديث حالات سريع.";
+  if (outlierCount > 0) return "يوجد طلب غير اعتيادي أثر على المتوسط؛ استخدم الوسيط لوصف الوقت المعتاد.";
+  return "العينة كافية، والوسيط هو المؤشر الأفضل للوقت المعتاد.";
+}
+
+function speedDataQuality(samples: number, suspiciousFastCount: number) {
+  if (samples === 0) return "غير كافية" as const;
+  if (samples < 5) return "عينة قليلة" as const;
+  if (suspiciousFastCount > 0) return "بيانات اختبار محتملة" as const;
+  return "كافية" as const;
+}
+
+function durationMetric(
+  label: string,
+  stage: AiSpeedMetric["stage"],
+  currentValues: number[],
+  previousValues: number[],
+  delayedThresholdMinutes: number,
+): AiSpeedMetric {
   const currentAverage = average(currentValues);
   const previousAverage = average(previousValues);
+  const currentMedian = median(currentValues);
+  const previousMedian = median(previousValues);
+  const maxValue = currentValues.length ? Math.max(...currentValues) : null;
+  const minValue = currentValues.length ? Math.min(...currentValues) : null;
+  const suspiciousFastCount = currentValues.filter((value) => value > 0 && value <= 0.0834).length;
+  const outlierThreshold = currentMedian === null ? null : Math.max(delayedThresholdMinutes, currentMedian * 3);
+  const outlierCount = outlierThreshold === null ? 0 : currentValues.filter((value) => value > outlierThreshold).length;
   return {
     label,
+    stage,
+    usualSource: "median",
     averageMinutes: currentAverage,
-    medianMinutes: median(currentValues),
+    medianMinutes: currentMedian,
+    minMinutes: minValue === null ? null : roundMetric(minValue),
+    maxMinutes: maxValue === null ? null : roundMetric(maxValue),
     samples: currentValues.length,
     delayedCount: currentValues.filter((value) => value > delayedThresholdMinutes).length,
+    outlierCount,
+    suspiciousFastCount,
+    dataQuality: speedDataQuality(currentValues.length, suspiciousFastCount),
+    note: speedMetricNote(currentValues.length, suspiciousFastCount, outlierCount),
     previousAverageMinutes: previousAverage,
-    changePercent: currentAverage !== null && previousAverage !== null ? percentChange(currentAverage, previousAverage) : null,
+    previousMedianMinutes: previousMedian,
+    changePercent: currentMedian !== null && previousMedian !== null ? percentChange(currentMedian, previousMedian) : null,
   };
 }
 
@@ -542,24 +579,24 @@ function buildSpeedMetrics(raw: OperationalRawData, currentStart: string, curren
   return {
     kitchen: {
       metrics: [
-        durationMetric("المطبخ: من الإرسال إلى بدء التحضير", stationValues(currentItems, "kitchen", "start"), stationValues(previousItems, "kitchen", "start"), 10),
-        durationMetric("المطبخ: من بدء التحضير إلى الجاهزية", stationValues(currentItems, "kitchen", "ready"), stationValues(previousItems, "kitchen", "ready"), 25),
+        durationMetric("المطبخ: submitted → preparing / وقت بدء الاستجابة", "submitted_to_preparing", stationValues(currentItems, "kitchen", "start"), stationValues(previousItems, "kitchen", "start"), 10),
+        durationMetric("المطبخ: preparing → ready / وقت التحضير", "preparing_to_ready", stationValues(currentItems, "kitchen", "ready"), stationValues(previousItems, "kitchen", "ready"), 25),
       ],
     },
     barista: {
       metrics: [
-        durationMetric("الباريستا: من الإرسال إلى بدء التحضير", stationValues(currentItems, "barista", "start"), stationValues(previousItems, "barista", "start"), 8),
-        durationMetric("الباريستا: من بدء التحضير إلى الجاهزية", stationValues(currentItems, "barista", "ready"), stationValues(previousItems, "barista", "ready"), 15),
+        durationMetric("الباريستا: submitted → preparing / وقت بدء الاستجابة", "submitted_to_preparing", stationValues(currentItems, "barista", "start"), stationValues(previousItems, "barista", "start"), 8),
+        durationMetric("الباريستا: preparing → ready / وقت التحضير", "preparing_to_ready", stationValues(currentItems, "barista", "ready"), stationValues(previousItems, "barista", "ready"), 15),
       ],
     },
     captain: {
       metrics: [
-        durationMetric("الخدمة: من الجاهزية إلى بانتظار الدفع", orderTransitionValues(currentEventsByOrder, "ready", "awaiting_payment"), orderTransitionValues(previousEventsByOrder, "ready", "awaiting_payment"), 12),
+        durationMetric("الكابتن: ready → awaiting_payment / انتظار تقديم الطلب للزبون", "ready_to_awaiting_payment", orderTransitionValues(currentEventsByOrder, "ready", "awaiting_payment"), orderTransitionValues(previousEventsByOrder, "ready", "awaiting_payment"), 12),
       ],
     },
     cashier: {
       metrics: [
-        durationMetric("الصندوق: من بانتظار الدفع إلى مدفوع", orderTransitionValues(currentEventsByOrder, "awaiting_payment", "paid"), orderTransitionValues(previousEventsByOrder, "awaiting_payment", "paid"), 10),
+        durationMetric("الكاشير: awaiting_payment → paid / انتظار الدفع", "awaiting_payment_to_paid", orderTransitionValues(currentEventsByOrder, "awaiting_payment", "paid"), orderTransitionValues(previousEventsByOrder, "awaiting_payment", "paid"), 10),
       ],
     },
   };
@@ -814,7 +851,7 @@ async function runOpenAiAnalysis(input: unknown, model: string): Promise<{ inven
         {
           role: "user",
           content:
-            "حلل بيانات Khatoun POS التالية. المخزون والطاولات والسرعة والمالية كلها أرقام محسوبة داخل النظام، ودورك تفسير الأنماط والتنبيه والتوصية فقط. إذا كان الرقم غير موجود استخدم عبارة بيانات غير كافية داخل النص ولا تخترع رقماً. اجعل Executive Summary أهم 5 أمور فقط وبدون تكرار.\n" +
+            "حلل بيانات Khatoun POS التالية. المخزون والطاولات والسرعة والمالية كلها أرقام محسوبة داخل النظام، ودورك تفسير الأنماط والتنبيه والتوصية فقط. إذا كان الرقم غير موجود استخدم عبارة بيانات غير كافية داخل النص ولا تخترع رقماً. في السرعة التشغيلية: لا تسم مرحلة بطيئة إذا sample_count أقل من 5، واستخدم medianMinutes لوصف الوقت المعتاد، واذكر outlierCount أو suspiciousFastCount إذا ظهرت. اجعل Executive Summary أهم 5 أمور فقط وبدون تكرار.\n" +
             JSON.stringify(input),
         },
       ],

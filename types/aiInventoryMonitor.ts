@@ -97,11 +97,20 @@ export type AiOperationalMetrics = {
 
 export type AiSpeedMetric = {
   label: string;
+  stage: "submitted_to_preparing" | "preparing_to_ready" | "ready_to_awaiting_payment" | "awaiting_payment_to_paid";
+  usualSource: "median";
   averageMinutes: number | null;
   medianMinutes: number | null;
+  minMinutes: number | null;
+  maxMinutes: number | null;
   samples: number;
   delayedCount: number;
+  outlierCount: number;
+  suspiciousFastCount: number;
+  dataQuality: "كافية" | "عينة قليلة" | "بيانات اختبار محتملة" | "غير كافية";
+  note: string;
   previousAverageMinutes: number | null;
+  previousMedianMinutes: number | null;
   changePercent: number | null;
 };
 

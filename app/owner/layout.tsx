@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode } from "react";
+import { AskKhatounOwnerChat } from "@/components/ai/AskKhatounOwnerChat";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { OwnerHeader } from "@/components/owner/OwnerHeader";
 import { OperationalToast } from "@/components/operational/OperationalToast";
@@ -40,6 +41,7 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
           <OwnerHeader session={session} />
           <ManagementTopNav items={navItems} />
           <main className="management-content owner-content w-full space-y-4 px-4 py-4 lg:px-6">{children}</main>
+          <AskKhatounOwnerChat />
           <OperationalToast toast={notifications.toast} />
         </div>
       )}
