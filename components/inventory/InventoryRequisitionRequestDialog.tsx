@@ -198,7 +198,7 @@ export function InventoryRequisitionRequestDialog({ isOpen, defaultDestination, 
               </label>
               <label className="space-y-1 text-sm font-medium">
                 <span>ملاحظة اختيارية</span>
-                <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="مثال: احتياج تحضير وردية المساء" className="h-11 w-full rounded-lg border border-white/10 bg-[#171513] px-3 text-sm outline-none placeholder:text-[#756d65]" />
+                <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="مثال: احتياج تحضير وردية المساء" className="h-11 w-full rounded-lg border border-white/10 bg-[#171513] px-3 text-sm outline-none placeholder:text-[#b8aea4]" />
               </label>
             </div>
 
@@ -225,7 +225,7 @@ export function InventoryRequisitionRequestDialog({ isOpen, defaultDestination, 
                         {conversionOptions.map((conversion) => <option key={conversion.id} value={`conversion:${conversion.id}`}>{conversion.packagingUnitNameAr}</option>)}
                       </select>
                     </div>
-                    <input value={line.notes} onChange={(event) => updateLine(line.id, { notes: event.target.value })} placeholder="ملاحظة للمادة اختياري" className="mt-2 h-10 w-full rounded-lg border border-white/10 bg-[#24211E] px-3 text-sm outline-none placeholder:text-[#756d65]" />
+                    <input value={line.notes} onChange={(event) => updateLine(line.id, { notes: event.target.value })} placeholder="ملاحظة للمادة اختياري" className="mt-2 h-10 w-full rounded-lg border border-white/10 bg-[#24211E] px-3 text-sm outline-none placeholder:text-[#b8aea4]" />
                     <p className="mt-2 text-xs text-[#C9BEB2]">
                       {normalized > 0 && item ? `يعادل ${formatNumber(normalized)} ${item.baseUnitName}. المتاح حالياً ${formatNumber(item.stockOnHand)} ${item.baseUnitName}` : "اختر المادة والكمية والوحدة."}
                     </p>

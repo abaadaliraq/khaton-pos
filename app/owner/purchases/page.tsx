@@ -3,9 +3,11 @@
 import { CheckCircle2, ClipboardList, Eye, ReceiptText, ShoppingCart, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { formatCurrency } from "@/lib/formatCurrency";
+import { singlePurchaseRequestQuantity } from "@/lib/purchaseRequestDisplay";
+import { createClient } from "@/lib/supabase/client";
 import { getPurchaseRequests, getPurchases } from "@/services/purchaseService";
 import type { Purchase, PurchaseRequest, PurchaseRequestStatus } from "@/types/finance";
-import { purchasePaymentStatusLabels, purchaseRequestStatusLabels } from "@/types/finance";
+import { purchasePaymentStatusLabels, purchaseRequestItemDecisionStatusLabels, purchaseRequestStatusLabels } from "@/types/finance";
 
 const baghdadTimeZone = "Asia/Baghdad";
 
@@ -44,16 +46,36 @@ function purchaseNumber(purchase: Purchase) {
 }
 
 function statusTone(status: PurchaseRequestStatus | "paid" | "unpaid") {
-  if (status === "approved" || status === "paid") return "bg-emerald-50 text-emerald-700 border-emerald-100";
-  if (status === "pending" || status === "unpaid") return "bg-amber-50 text-amber-700 border-amber-100";
+  if (status === "approved" || status === "paid" || status === "received") return "bg-emerald-50 text-emerald-700 border-emerald-100";
+  if (status === "partially_received") return "bg-amber-50 text-amber-700 border-amber-100";
+  if (status === "pending" || status === "decision_in_progress" || status === "partially_approved" || status === "unpaid") return "bg-amber-50 text-amber-700 border-amber-100";
   if (status === "rejected" || status === "cancelled") return "bg-rose-50 text-rose-700 border-rose-100";
   return "bg-[#f5eee6] text-[#a65f3f] border-[#eadccd]";
 }
 
-function itemSummary(items: PurchaseRequest["items"]) {
-  if (items.length === 0) return "لا توجد مواد";
-  const names = items.slice(0, 3).map((item) => item.inventoryItemName).join("، ");
-  return items.length > 3 ? names + " +" + formatNumber(items.length - 3) : names;
+function itemSummary(request: PurchaseRequest) {
+  if (request.items.length === 0) return "لا توجد مواد";
+  const visibleItems = request.items.slice(0, 4).map((item) => item.inventoryItemName).join("، ");
+  const hiddenCount = request.items.length - 4;
+  return hiddenCount > 0 ? `${visibleItems} +${formatNumber(hiddenCount)}` : visibleItems;
+}
+
+function quantitySummary(request: PurchaseRequest) {
+  if (request.items.length === 1) return singlePurchaseRequestQuantity(request);
+  if (request.items.length === 0) return "-";
+  const visibleItems = request.items.slice(0, 4).map((item) => `${formatNumber(item.quantity)} ${item.unitCode}`).join("، ");
+  const hiddenCount = request.items.length - 4;
+  return hiddenCount > 0 ? `${visibleItems} +${formatNumber(hiddenCount)}` : visibleItems;
+}
+
+function itemDecisionTone(status: PurchaseRequest["items"][number]["decisionStatus"]) {
+  if (status === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "rejected") return "border-rose-200 bg-rose-50 text-rose-800";
+  return "border-amber-200 bg-amber-50 text-amber-800";
+}
+
+function requestEstimatedValue(request: PurchaseRequest) {
+  return request.items.reduce((total, item) => total + item.quantity * (item.lastPurchaseCost ?? 0), 0);
 }
 
 function SummaryCard({ title, value, icon: Icon }: { title: string; value: string; icon: typeof ShoppingCart }) {
@@ -137,20 +159,28 @@ function RequestDetailsDialog({ request, onClose }: { request: PurchaseRequest; 
         ]} />
         <section className="rounded-md border border-[#e4d8c8] bg-white p-4">
           <h3 className="font-semibold text-[#2f211c]">المواد المطلوبة</h3>
-          <div className="mt-3 divide-y divide-[#eee4d8]">
-            {request.items.map((item) => (
-              <div key={item.id} className="grid gap-2 py-3 text-sm sm:grid-cols-[1fr_auto]">
-                <span className="font-medium text-[#2f211c]">{item.inventoryItemName}</span>
-                <span className="text-[#7c6b60]">{formatNumber(item.quantity)} {item.unitCode}</span>
-                {item.notes ? <p className="sm:col-span-2 text-xs text-[#7c6b60]">{item.notes}</p> : null}
-              </div>
-            ))}
-            {request.items.length === 0 ? <EmptyState message="لا توجد مواد مرتبطة بهذا الطلب." /> : null}
+          <div className="mt-3 overflow-x-auto rounded-md border border-[#eee4d8]">
+            <table className="w-full min-w-[760px] border-collapse text-right text-xs">
+              <thead className="bg-[#2b2421] text-white"><tr><th className="border-l border-[#e6dacd] px-3 py-2">المادة</th><th className="border-l border-[#e6dacd] px-3 py-2">الكمية</th><th className="border-l border-[#e6dacd] px-3 py-2">الوحدة</th><th className="border-l border-[#e6dacd] px-3 py-2">الحالة</th><th className="px-3 py-2">السبب</th></tr></thead>
+              <tbody className="divide-y divide-[#eee4d8]">
+                {request.items.map((item) => (
+                  <tr key={item.id} className="align-top odd:bg-white even:bg-[#fffdfa]">
+                    <td className="whitespace-normal break-words border-l border-[#f0e5da] px-3 py-3 font-bold text-[#181818]">{item.inventoryItemName}</td>
+                    <td className="border-l border-[#f0e5da] px-3 py-3 text-[#2f211c]">{formatNumber(item.quantity)}</td>
+                    <td className="border-l border-[#f0e5da] px-3 py-3 text-[#2f211c]">{item.unitCode}</td>
+                    <td className="border-l border-[#f0e5da] px-3 py-3"><span className={"rounded-md border px-2 py-1 text-xs font-bold " + itemDecisionTone(item.decisionStatus)}>{purchaseRequestItemDecisionStatusLabels[item.decisionStatus]}</span></td>
+                    <td className="whitespace-normal break-words px-3 py-3 text-[#4a3b34]">{item.rejectionReason ?? item.notes ?? "-"}</td>
+                  </tr>
+                ))}
+                {request.items.length === 0 ? <tr><td colSpan={5}><EmptyState message="لا توجد مواد مرتبطة بهذا الطلب." /></td></tr> : null}
+              </tbody>
+            </table>
           </div>
         </section>
         <InfoGrid rows={[
           ["ملاحظات الطلب", request.notes ?? "-"],
           ["ملاحظات القرار", request.decisionNotes ?? "-"],
+          ["سبب الرفض", request.rejectionReason ?? "-"],
         ]} />
       </div>
     </ReadOnlyDialog>
@@ -190,28 +220,42 @@ function PurchaseDetailsDialog({ purchase, onClose }: { purchase: Purchase; onCl
   );
 }
 
-function RequestsPanel({ requests, onOpen }: { requests: PurchaseRequest[]; onOpen: (request: PurchaseRequest) => void }) {
+function RequestsPanel({ requests }: { requests: PurchaseRequest[] }) {
   return (
     <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
       <div className="border-b border-[#eee4d8] p-4"><h2 className="font-semibold text-[#2f211c]">طلبات الشراء الأخيرة</h2></div>
-      {requests.length === 0 ? <div className="p-4"><EmptyState message="لا توجد طلبات شراء حالياً." /></div> : null}
-      <div className="divide-y divide-[#eee4d8]">
-        {requests.map((request) => (
-          <article key={request.id} className="grid gap-3 p-4 text-sm lg:grid-cols-[1fr_auto] lg:items-center">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-[#2f211c]">{requestNumber(request)}</span>
-                <span className={"rounded-md border px-2 py-1 text-xs font-semibold " + statusTone(request.status)}>{purchaseRequestStatusLabels[request.status]}</span>
-              </div>
-              <p className="mt-2 text-[#2f211c]">{itemSummary(request.items)}</p>
-              <p className="mt-1 text-xs text-[#7c6b60]">مقدم الطلب: {request.requestedByName} · {formatDateTime(request.createdAt)}</p>
-              <p className="mt-1 text-xs text-[#7c6b60]">من وافق أو رفض: {request.decidedByName ?? "-"}</p>
-            </div>
-            <button type="button" onClick={() => onOpen(request)} className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#e4d8c8] px-3 text-sm text-[#4a3b34] hover:bg-[#f5eee6]">
-              <Eye size={16} />عرض
-            </button>
-          </article>
-        ))}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[980px] table-fixed border-collapse text-right text-xs">
+          <thead className="bg-[#2b2421] text-white">
+            <tr>
+              <th className="w-[12%] border-l border-[#e6dacd] px-3 py-2">رقم الطلب</th>
+              <th className="w-[14%] border-l border-[#e6dacd] px-3 py-2">التاريخ</th>
+              <th className="w-[13%] border-l border-[#e6dacd] px-3 py-2">طالب الشراء</th>
+              <th className="w-[22%] border-l border-[#e6dacd] px-3 py-2">المواد</th>
+              <th className="w-[14%] border-l border-[#e6dacd] px-3 py-2">الكمية</th>
+              <th className="w-[8%] border-l border-[#e6dacd] px-3 py-2">عدد المواد</th>
+              <th className="w-[10%] border-l border-[#e6dacd] px-3 py-2">القيمة</th>
+              <th className="w-[7%] px-3 py-2">الحالة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {requests.map((request) => (
+              <tr key={request.id} className="align-top odd:bg-white even:bg-[#fffdfa] hover:bg-[#fff4eb]">
+                <td className="border border-[#f0e5da] px-3 py-3 font-bold text-[#181818]" dir="ltr">{requestNumber(request)}</td>
+                <td className="whitespace-normal border border-[#f0e5da] px-3 py-3 leading-6 text-[#2f211c]">{formatDateTime(request.createdAt)}</td>
+                <td className="whitespace-normal break-words border border-[#f0e5da] px-3 py-3 font-semibold leading-6 text-[#181818]">{request.requestedByName}</td>
+                <td className="whitespace-normal break-words border border-[#f0e5da] px-3 py-3 font-semibold leading-6 text-[#181818]">{itemSummary(request)}</td>
+                <td className="whitespace-normal break-words border border-[#f0e5da] px-3 py-3 font-bold leading-6 text-[#181818]">{quantitySummary(request)}</td>
+                <td className="border border-[#f0e5da] px-3 py-3 text-[#2f211c]">{formatNumber(request.items.length)}</td>
+                <td className="border border-[#f0e5da] px-3 py-3 text-[#2f211c]">{formatCurrency(requestEstimatedValue(request))}</td>
+                <td className="border border-[#f0e5da] px-3 py-3">
+                  <span className={"rounded-md border px-2 py-1 text-xs font-semibold " + statusTone(request.status)}>{purchaseRequestStatusLabels[request.status]}</span>
+                </td>
+              </tr>
+            ))}
+            {requests.length === 0 ? <tr><td colSpan={8} className="border border-[#f0e5da] px-3 py-8 text-center text-sm text-[#7c6b60]">لا توجد طلبات شراء حالياً.</td></tr> : null}
+          </tbody>
+        </table>
       </div>
     </section>
   );
@@ -222,23 +266,40 @@ function PurchasesPanel({ purchases, onOpen }: { purchases: Purchase[]; onOpen: 
     <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
       <div className="border-b border-[#eee4d8] p-4"><h2 className="font-semibold text-[#2f211c]">آخر فواتير الشراء</h2></div>
       {purchases.length === 0 ? <div className="p-4"><EmptyState message="لا توجد فواتير شراء حالياً." /></div> : null}
-      <div className="divide-y divide-[#eee4d8]">
-        {purchases.map((purchase) => (
-          <article key={purchase.id} className="grid gap-3 p-4 text-sm lg:grid-cols-[1fr_auto] lg:items-center">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-[#2f211c]">{purchaseNumber(purchase)}</span>
-                <span className={"rounded-md border px-2 py-1 text-xs font-semibold " + statusTone(purchase.paymentStatus)}>{purchasePaymentStatusLabels[purchase.paymentStatus]}</span>
-              </div>
-              <p className="mt-2 text-[#2f211c]">{purchase.supplierName} · {formatCurrency(purchase.totalAmount)}</p>
-              <p className="mt-1 text-xs text-[#7c6b60]">رقم فاتورة المورد: {purchase.supplierInvoiceNumber ?? "-"} · {formatDateTime(purchase.createdAt)}</p>
-              <p className="mt-1 text-xs text-[#7c6b60]">المسؤول عن الاستلام: {purchase.createdByName}</p>
-            </div>
-            <button type="button" onClick={() => onOpen(purchase)} className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#e4d8c8] px-3 text-sm text-[#4a3b34] hover:bg-[#f5eee6]">
-              <Eye size={16} />عرض
-            </button>
-          </article>
-        ))}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[980px] table-fixed border-collapse text-right text-xs">
+          <thead className="bg-[#2b2421] text-white">
+            <tr>
+              <th className="w-[13%] border-l border-[#e6dacd] px-3 py-2">رقم الفاتورة</th>
+              <th className="w-[22%] border-l border-[#e6dacd] px-3 py-2">المورد</th>
+              <th className="w-[16%] border-l border-[#e6dacd] px-3 py-2">التاريخ</th>
+              <th className="w-[13%] border-l border-[#e6dacd] px-3 py-2">المبلغ</th>
+              <th className="w-[12%] border-l border-[#e6dacd] px-3 py-2">الحالة</th>
+              <th className="w-[16%] border-l border-[#e6dacd] px-3 py-2">المستلم بواسطة</th>
+              <th className="w-[8%] px-3 py-2">عرض</th>
+            </tr>
+          </thead>
+          <tbody>
+            {purchases.map((purchase) => (
+              <tr key={purchase.id} className="align-top odd:bg-white even:bg-[#fffdfa] hover:bg-[#fff4eb]">
+                <td className="border border-[#f0e5da] px-3 py-3 font-bold text-[#181818]" dir="ltr">{purchaseNumber(purchase)}</td>
+                <td className="whitespace-normal break-words border border-[#f0e5da] px-3 py-3 font-semibold leading-6 text-[#181818]">{purchase.supplierName}</td>
+                <td className="whitespace-normal border border-[#f0e5da] px-3 py-3 leading-6 text-[#2f211c]">{formatDateTime(purchase.createdAt)}</td>
+                <td className="border border-[#f0e5da] px-3 py-3 font-bold text-[#181818]">{formatCurrency(purchase.totalAmount)}</td>
+                <td className="border border-[#f0e5da] px-3 py-3">
+                  <span className={"rounded-md border px-2 py-1 text-xs font-semibold " + statusTone(purchase.paymentStatus)}>{purchasePaymentStatusLabels[purchase.paymentStatus]}</span>
+                </td>
+                <td className="whitespace-normal break-words border border-[#f0e5da] px-3 py-3 leading-6 text-[#2f211c]">{purchase.createdByName}</td>
+                <td className="border border-[#f0e5da] px-3 py-3">
+                  <button type="button" onClick={() => onOpen(purchase)} className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-[#e4d8c8] px-3 text-xs font-semibold text-[#4a3b34] hover:bg-[#f5eee6]">
+                    <Eye size={14} />عرض
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {purchases.length === 0 ? <tr><td colSpan={7} className="border border-[#f0e5da] px-3 py-8 text-center text-sm text-[#7c6b60]">لا توجد فواتير شراء حالياً.</td></tr> : null}
+          </tbody>
+        </table>
       </div>
     </section>
   );
@@ -273,12 +334,40 @@ export default function OwnerPurchasesPage() {
     return () => { isMounted = false; };
   }, []);
 
+  useEffect(() => {
+    const supabase = createClient();
+    let reloadTimer: number | null = null;
+    function scheduleReload() {
+      if (reloadTimer) window.clearTimeout(reloadTimer);
+      reloadTimer = window.setTimeout(() => {
+        reloadTimer = null;
+        Promise.allSettled([getPurchaseRequests(), getPurchases()])
+          .then(([requestResult, purchaseResult]) => {
+            if (requestResult.status === "fulfilled") setRequests(requestResult.value);
+            if (purchaseResult.status === "fulfilled") setPurchases(purchaseResult.value);
+          })
+          .catch((error) => console.error("Failed to refresh owner purchases data", error));
+      }, 300);
+    }
+    const channel = supabase
+      .channel("owner-purchase-oversight")
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_requests" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_request_items" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchases" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_items" }, () => scheduleReload())
+      .subscribe();
+    return () => {
+      if (reloadTimer) window.clearTimeout(reloadTimer);
+      void supabase.removeChannel(channel);
+    };
+  }, []);
+
   const summary = useMemo(() => {
     const today = getBaghdadDate();
     const monthStart = startOfMonth(today);
     return {
-      pendingRequests: requests.filter((request) => request.status === "pending").length,
-      approvedAwaitingReceiving: requests.filter((request) => request.status === "approved").length,
+      pendingRequests: requests.filter((request) => request.status === "pending" || request.status === "decision_in_progress").length,
+      approvedAwaitingReceiving: requests.filter((request) => request.status === "approved" || request.status === "partially_approved").length,
       purchasesThisMonth: purchases.filter((purchase) => {
         const purchaseDate = localDateKey(purchase.createdAt);
         return purchaseDate >= monthStart && purchaseDate <= today;
@@ -302,14 +391,14 @@ export default function OwnerPurchasesPage() {
       ) : (
         <>
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard title="طلبات شراء بانتظار الموافقة" value={formatNumber(summary.pendingRequests) + " طلب"} icon={ClipboardList} />
+            <SummaryCard title="طلبات شراء بانتظار قرار المدير" value={formatNumber(summary.pendingRequests) + " طلب"} icon={ClipboardList} />
             <SummaryCard title="معتمدة بانتظار الاستلام" value={formatNumber(summary.approvedAwaitingReceiving) + " طلب"} icon={CheckCircle2} />
             <SummaryCard title="مشتريات هذا الشهر" value={formatCurrency(summary.purchasesThisMonth)} icon={ShoppingCart} />
             <SummaryCard title="فواتير مشتريات غير مدفوعة" value={formatNumber(summary.unpaidInvoices) + " فاتورة"} icon={ReceiptText} />
           </section>
 
-          <div className="grid gap-4 xl:grid-cols-2">
-            <RequestsPanel requests={requests.slice(0, 10)} onOpen={setSelectedRequest} />
+          <div className="space-y-4">
+            <RequestsPanel requests={requests.slice(0, 10)} />
             <PurchasesPanel purchases={purchases.slice(0, 10)} onOpen={setSelectedPurchase} />
           </div>
         </>

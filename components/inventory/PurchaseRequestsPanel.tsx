@@ -1,12 +1,14 @@
 "use client";
 
 import { CheckCircle2, PackageCheck, Plus, RefreshCw, Save, Search, UserPlus, X } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatCurrency } from "@/lib/formatCurrency";
+import { purchaseRequestCode, purchaseRequestItemsSummary, singlePurchaseRequestItemName, singlePurchaseRequestQuantity } from "@/lib/purchaseRequestDisplay";
+import { createClient } from "@/lib/supabase/client";
 import { logSupabaseError } from "@/lib/supabaseError";
 import { createInventoryPurchase, createPurchaseRequest, createSupplier, getPurchaseRequests, getSuppliers } from "@/services/purchaseService";
 import type { CreatePurchaseItemInput, CreatePurchaseRequestItemInput, CreateSupplierInput, PurchaseRequest, Supplier } from "@/types/finance";
-import { purchaseRequestStatusLabels } from "@/types/finance";
+import { purchaseRequestItemDecisionStatusLabels, purchaseRequestStatusLabels } from "@/types/finance";
 import type { InventoryItem, InventoryUnit } from "@/types/inventory";
 
 const baghdadTimeZone = "Asia/Baghdad";
@@ -23,7 +25,7 @@ type ReceiveForm = {
   supplierInvoiceNumber: string;
   supplierInvoiceDate: string;
   notes: string;
-  items: CreatePurchaseItemInput[];
+  items: Array<CreatePurchaseItemInput & { requestItemId: string }>;
 };
 
 function newRequestForm(): RequestForm {
@@ -37,6 +39,35 @@ function formatDateTime(value: string | null) {
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(Number.isFinite(value) ? value : 0);
+}
+
+function itemSummary(request: PurchaseRequest) {
+  return singlePurchaseRequestItemName(request);
+}
+
+function requestEstimatedValue(request: PurchaseRequest) {
+  return request.items.reduce((total, item) => total + item.quantity * (item.lastPurchaseCost ?? 0), 0);
+}
+
+function receivingStatusLabel(status: PurchaseRequest["items"][number]["receivingStatus"]) {
+  if (status === "received") return "مكتمل الاستلام";
+  if (status === "partially_received") return "مستلم جزئياً";
+  return "بانتظار الاستلام";
+}
+
+function receivingStatusTone(status: PurchaseRequest["items"][number]["receivingStatus"]) {
+  if (status === "received") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "partially_received") return "border-amber-200 bg-amber-50 text-amber-800";
+  return "border-[#e4d8c8] bg-white text-[#4a3b34]";
+}
+
+function statusTone(status: PurchaseRequest["status"]) {
+  if (status === "pending") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (status === "approved") return "border-sky-200 bg-sky-50 text-sky-800";
+  if (status === "partially_received") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (status === "received") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "rejected" || status === "cancelled") return "border-rose-200 bg-rose-50 text-rose-800";
+  return "border-[#e4d8c8] bg-[#fbfaf7] text-[#4a3b34]";
 }
 
 type PurchaseRequestsPanelMode = "requests" | "receiving";
@@ -62,15 +93,19 @@ export function PurchaseRequestsPanel({
   const [isSupplierOpen, setIsSupplierOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<PurchaseRequest["status"] | "all">("all");
+  const realtimeReloadTimerRef = useRef<number | null>(null);
 
   const activeItems = items.filter((item) => item.isActive);
-  const approvedRequests = requests.filter((request) => request.status === "approved");
-  const pendingRequests = requests.filter((request) => request.status === "pending");
-  const displayedRequests = (mode === "receiving" ? approvedRequests : requests).filter((request) => {
+  const receivableRequests = requests.filter((request) => request.status === "approved" || request.status === "partially_approved" || request.status === "partially_received");
+  const approvedRequests = requests.filter((request) => request.status === "approved" || request.status === "partially_approved");
+  const partiallyReceivedRequests = requests.filter((request) => request.status === "partially_received");
+  const pendingRequests = requests.filter((request) => request.status === "pending" || request.status === "decision_in_progress");
+  const displayedRequests = (mode === "receiving" ? receivableRequests : requests).filter((request) => {
     const query = search.trim().toLocaleLowerCase("ar-IQ");
     const searchMatches =
       !query ||
@@ -89,6 +124,7 @@ export function PurchaseRequestsPanel({
       const [nextRequests, nextSuppliers] = await Promise.all([getPurchaseRequests(), getSuppliers()]);
       setRequests(nextRequests);
       setSuppliers(nextSuppliers);
+      setLastUpdatedAt(new Date().toISOString());
     } catch (loadError) {
       logSupabaseError("[inventory purchase requests load]", loadError);
       setError("تعذر تحميل طلبات الشراء.");
@@ -104,6 +140,34 @@ export function PurchaseRequestsPanel({
 
     return () => window.clearTimeout(timer);
   }, [loadRequests]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    function scheduleReload() {
+      if (realtimeReloadTimerRef.current) {
+        window.clearTimeout(realtimeReloadTimerRef.current);
+      }
+
+      realtimeReloadTimerRef.current = window.setTimeout(() => {
+        realtimeReloadTimerRef.current = null;
+        void loadRequests();
+      }, 300);
+    }
+
+    const channel = supabase
+      .channel(`purchase-requests-panel-${mode}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_requests" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_request_items" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_items" }, () => scheduleReload())
+      .subscribe();
+
+    return () => {
+      if (realtimeReloadTimerRef.current) {
+        window.clearTimeout(realtimeReloadTimerRef.current);
+      }
+      void supabase.removeChannel(channel);
+    };
+  }, [loadRequests, mode]);
 
   function flash(nextMessage: string) {
     setMessage(nextMessage);
@@ -139,7 +203,7 @@ export function PurchaseRequestsPanel({
       setRequests((current) => [created, ...current]);
       setRequestForm(newRequestForm());
       setIsRequestFormOpen(false);
-      flash("تم إنشاء طلب الشراء بانتظار الموافقة");
+      flash("تم إنشاء طلب الشراء بانتظار قرار مدير النظام");
     } catch (saveError) {
       logSupabaseError("[inventory purchase request create]", saveError);
       setError("تعذر إنشاء طلب الشراء.");
@@ -149,6 +213,12 @@ export function PurchaseRequestsPanel({
   }
 
   function openReceive(request: PurchaseRequest) {
+    const approvedItems = request.items.filter((item) => item.decisionStatus === "approved" && item.remainingQuantity > 0);
+    if (approvedItems.length === 0) {
+      setError("لا توجد مواد موافق عليها ومتاحة للاستلام في هذا الطلب.");
+      return;
+    }
+
     setReceiveRequest(request);
     setReceiveForm({
       clientRequestId: crypto.randomUUID(),
@@ -156,11 +226,12 @@ export function PurchaseRequestsPanel({
       supplierInvoiceNumber: "",
       supplierInvoiceDate: "",
       notes: "",
-      items: request.items.map((item) => ({
+      items: approvedItems.map((item) => ({
         inventoryItemId: item.inventoryItemId,
-        quantity: item.quantity,
+        quantity: 0,
         unitId: item.unitId,
         unitPrice: 0,
+        requestItemId: item.id,
       })),
     });
   }
@@ -174,8 +245,18 @@ export function PurchaseRequestsPanel({
     }
 
     const validItems = receiveForm.items.filter((item) => item.inventoryItemId && item.unitId && item.quantity > 0 && item.unitPrice >= 0);
-    if (validItems.length === 0 || validItems.length !== receiveForm.items.length) {
-      setError("أكمل الكميات المستلمة والأسعار الفعلية.");
+    if (validItems.length === 0) {
+      setError("أدخل كمية الدفعة الحالية لمادة واحدة على الأقل.");
+      return;
+    }
+
+    const hasOverReceipt = validItems.some((item) => {
+      const requested = receiveRequest.items.find((requestItem) => requestItem.id === item.requestItemId);
+      return !requested || item.quantity > requested.remainingQuantity;
+    });
+
+    if (hasOverReceipt) {
+      setError("لا يمكن استلام كمية أكبر من المتبقي في طلب الشراء.");
       return;
     }
 
@@ -189,12 +270,17 @@ export function PurchaseRequestsPanel({
         supplierInvoiceNumber: receiveForm.supplierInvoiceNumber,
         supplierInvoiceDate: receiveForm.supplierInvoiceDate,
         notes: receiveForm.notes,
-        items: validItems,
+        items: validItems.map((item) => ({
+          inventoryItemId: item.inventoryItemId,
+          quantity: item.quantity,
+          unitId: item.unitId,
+          unitPrice: item.unitPrice,
+        })),
       });
       setReceiveRequest(null);
       setReceiveForm(null);
       await Promise.all([loadRequests(), onInventoryChanged()]);
-      flash("تم تسجيل الاستلام وتحديث المخزون");
+      flash("تم تسجيل دفعة الاستلام وتحديث المتبقي والمخزون");
     } catch (receiveError) {
       logSupabaseError("[inventory purchase receive]", receiveError);
       setError("تعذر تسجيل الاستلام.");
@@ -245,7 +331,8 @@ export function PurchaseRequestsPanel({
             <option value="all">كل الحالات</option>
             {Object.entries(purchaseRequestStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
-          <button type="button" onClick={() => void loadRequests()} className="inline-flex h-9 items-center gap-2 rounded-md border border-[#e4d8c8] px-3 text-sm text-[#4a3b34] hover:bg-[#f5eee6]"><RefreshCw size={15} />تحديث</button>
+          {lastUpdatedAt ? <span className="text-xs font-semibold text-[#7c6b60]">آخر تحديث: {formatDateTime(lastUpdatedAt)}</span> : null}
+          <button type="button" disabled={isLoading} onClick={() => void loadRequests()} className="inline-flex h-9 items-center gap-2 rounded-md border border-[#e4d8c8] px-3 text-sm text-[#4a3b34] hover:bg-[#f5eee6] disabled:opacity-50"><RefreshCw size={15} className={isLoading ? "animate-spin" : ""} />تحديث</button>
           {mode === "requests" ? (
           <button type="button" onClick={() => setIsRequestFormOpen((current) => !current)} className="inline-flex h-10 items-center gap-2 rounded-md bg-[#a65f3f] px-4 text-sm font-semibold text-white hover:bg-[#8f4e34]">
             <Plus size={17} />
@@ -286,43 +373,47 @@ export function PurchaseRequestsPanel({
       ) : null}
 
       <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-[#eee4d8] bg-[#fbfaf7] px-3 py-2"><h2 className="font-semibold text-[#2f211c]">{mode === "receiving" ? "طلبات شراء معتمدة للاستلام" : "طلبات الشراء"} · بانتظار {formatNumber(pendingRequests.length)} · معتمدة {formatNumber(approvedRequests.length)}</h2>{isLoading ? <span className="text-sm text-[#7c6b60]">جارٍ التحميل...</span> : null}</div>
+        <div className="flex items-center justify-between border-b border-[#eee4d8] bg-[#fbfaf7] px-3 py-2"><h2 className="font-semibold text-[#2f211c]">{mode === "receiving" ? "طلبات شراء للاستلام" : "طلبات الشراء"} · بانتظار القرار {formatNumber(pendingRequests.length)} · بانتظار الاستلام {formatNumber(approvedRequests.length)} · مستلمة جزئياً {formatNumber(partiallyReceivedRequests.length)}</h2>{isLoading ? <span className="text-sm text-[#7c6b60]">جارٍ التحميل...</span> : null}</div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] table-fixed border-collapse text-xs">
+          <table className="w-full min-w-[1120px] table-fixed border-collapse text-xs">
             <thead className="sticky top-0 z-20 bg-[#2b2421] text-white">
               <tr>
                 <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">رقم الطلب</th>
-                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">التاريخ</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">التاريخ والوقت</th>
                 <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">طالب الشراء</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">المواد</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">الكمية المطلوبة</th>
                 <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">عدد المواد</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">القيمة التقديرية</th>
                 <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">الحالة</th>
-                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">وافق بواسطة</th>
-                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">وقت الموافقة</th>
-                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">المستلم</th>
-                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">آخر استلام</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">القرار بواسطة</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">وقت القرار</th>
+                <th className="border-l border-[#e6dacd] px-3 py-2 text-right font-semibold">آخر تحديث</th>
                 <th className="px-3 py-2 text-right font-semibold">الإجراء</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#eee4d8]">
               {displayedRequests.map((request) => (
-                <tr key={request.id} className="odd:bg-white even:bg-[#fffdfa] hover:bg-[#fff4eb]">
-                  <td className="border-l border-[#f0e5da] px-3 py-2 font-semibold text-[#2f211c]" dir="ltr">PUR-{String(request.requestNumber).padStart(4, "0")}</td>
+                <tr key={request.id} className="align-top odd:bg-white even:bg-[#fffdfa] hover:bg-[#fff4eb]">
+                  <td className="border-l border-[#f0e5da] px-3 py-2 font-semibold text-[#2f211c]" dir="ltr">{purchaseRequestCode(request)}</td>
                   <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{formatDateTime(request.createdAt)}</td>
                   <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{request.requestedByName}</td>
+                  <td className="border-l border-[#f0e5da] px-3 py-2 font-semibold text-[#2f211c]">{itemSummary(request)}</td>
+                  <td className="border-l border-[#f0e5da] px-3 py-2 font-bold text-[#181818]">{request.items.length === 1 ? singlePurchaseRequestQuantity(request) : purchaseRequestItemsSummary(request)}</td>
                   <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{formatNumber(request.items.length)}</td>
-                  <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{purchaseRequestStatusLabels[request.status]}</td>
+                  <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{formatCurrency(requestEstimatedValue(request))}</td>
+                  <td className="whitespace-normal break-words border-l border-[#f0e5da] px-3 py-3 leading-6"><span className={`inline-flex rounded-md border px-2 py-1 text-xs font-bold ${statusTone(request.status)}`}>{purchaseRequestStatusLabels[request.status]}</span>{request.status === "rejected" && request.rejectionReason ? <p className="mt-2 whitespace-normal break-words text-xs font-semibold leading-5 text-rose-700">سبب الرفض: {request.rejectionReason}</p> : null}</td>
                   <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{request.decidedByName ?? "-"}</td>
                   <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{formatDateTime(request.decidedAt)}</td>
-                  <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{request.receivedByName ?? "-"}</td>
-                  <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{formatDateTime(request.receivedAt)}</td>
+                  <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{formatDateTime(request.updatedAt)}</td>
                   <td className="px-3 py-2">
-                    {request.status === "approved" ? <button type="button" onClick={() => openReceive(request)} className="inline-flex h-8 items-center gap-2 rounded-md bg-[#5d4032] px-3 text-xs font-semibold text-white"><PackageCheck size={14} />تسجيل الاستلام</button> : <span className="text-[#9a8779]">-</span>}
+                    {request.status === "approved" || request.status === "partially_approved" || request.status === "partially_received" ? <button type="button" onClick={() => openReceive(request)} className="inline-flex h-8 items-center gap-2 rounded-md bg-[#5d4032] px-3 text-xs font-semibold text-white"><PackageCheck size={14} />تسجيل دفعة</button> : <span className="text-[#9a8779]">-</span>}
                   </td>
                 </tr>
               ))}
               {displayedRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-sm text-[#4a3b34]">{mode === "receiving" ? "لا توجد طلبات معتمدة للاستلام حالياً" : "لا توجد طلبات شراء مطابقة"}</td>
+                  <td colSpan={12} className="px-3 py-8 text-center text-sm text-[#4a3b34]">{mode === "receiving" ? "لا توجد طلبات بانتظار الاستلام حالياً" : "لا توجد طلبات شراء مطابقة"}</td>
                 </tr>
               ) : null}
             </tbody>
@@ -339,7 +430,64 @@ export function PurchaseRequestsPanel({
               <label className="grid gap-1 text-sm font-medium text-[#4a3b34]">رقم فاتورة المورد<input value={receiveForm.supplierInvoiceNumber} onChange={(event) => setReceiveForm((current) => current ? { ...current, supplierInvoiceNumber: event.target.value } : current)} className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 outline-none" /></label>
               <label className="grid gap-1 text-sm font-medium text-[#4a3b34]">تاريخ فاتورة المورد<input type="date" value={receiveForm.supplierInvoiceDate} onChange={(event) => setReceiveForm((current) => current ? { ...current, supplierInvoiceDate: event.target.value } : current)} className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 outline-none" /></label>
             </div>
-            <div className="mt-4 overflow-x-auto rounded-md border border-[#eee4d8]"><table className="w-full min-w-[920px] text-right text-sm"><thead className="bg-[#fbfaf7] text-[#7c6b60]"><tr><th className="px-3 py-3">المادة</th><th className="px-3 py-3">المطلوب</th><th className="px-3 py-3">المستلم فعلياً</th><th className="px-3 py-3">الوحدة</th><th className="px-3 py-3">سعر الوحدة</th><th className="px-3 py-3">الإجمالي</th></tr></thead><tbody className="divide-y divide-[#eee4d8]">{receiveForm.items.map((line, index) => { const requested = receiveRequest.items[index]; return <tr key={index}><td className="px-3 py-3 font-medium text-[#2f211c]">{requested?.inventoryItemName ?? "-"}</td><td className="px-3 py-3 text-[#7c6b60]">{requested ? `${formatNumber(requested.quantity)} ${requested.unitCode}` : "-"}</td><td className="px-3 py-3"><input type="number" min="0.001" step="0.001" value={line.quantity || ""} onChange={(event) => updateReceiveLine(index, { quantity: event.target.value ? Number(event.target.value) : 0 })} className="h-10 w-full rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 outline-none" /></td><td className="px-3 py-3"><select value={line.unitId} onChange={(event) => updateReceiveLine(index, { unitId: event.target.value })} className="h-10 w-full rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 outline-none">{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.nameAr}</option>)}</select></td><td className="px-3 py-3"><input type="number" min="0" value={line.unitPrice || ""} onChange={(event) => updateReceiveLine(index, { unitPrice: event.target.value ? Number(event.target.value) : 0 })} className="h-10 w-full rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 outline-none" /></td><td className="px-3 py-3 font-semibold text-[#2f211c]">{formatCurrency(line.quantity * line.unitPrice)}</td></tr>; })}</tbody></table></div>
+            <div className="mt-4 overflow-x-auto rounded-md border border-[#eee4d8]">
+              <table className="w-full min-w-[1180px] border-collapse text-right text-sm">
+                <thead className="bg-[#2b2421] text-white">
+                  <tr>
+                    <th className="border-l border-[#e6dacd] px-3 py-3">المادة</th>
+                    <th className="border-l border-[#e6dacd] px-3 py-3">المطلوبة</th>
+                    <th className="border-l border-[#e6dacd] px-3 py-3">المستلمة</th>
+                    <th className="border-l border-[#e6dacd] px-3 py-3">المتبقية</th>
+                    <th className="border-l border-[#e6dacd] px-3 py-3">الوحدة</th>
+                    <th className="border-l border-[#e6dacd] px-3 py-3">قرار المادة</th>
+                    <th className="border-l border-[#e6dacd] px-3 py-3">حالة الاستلام</th>
+                    <th className="border-l border-[#e6dacd] px-3 py-3">كمية الدفعة الحالية</th>
+                    <th className="border-l border-[#e6dacd] px-3 py-3">سعر الوحدة</th>
+                    <th className="px-3 py-3">الإجمالي</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#eee4d8]">
+                  {receiveForm.items.map((line, index) => {
+                    const requested = receiveRequest.items.find((item) => item.id === line.requestItemId) ?? receiveRequest.items[index];
+                    const isComplete = !requested || requested.remainingQuantity <= 0;
+                    return (
+                      <tr key={line.requestItemId} className="odd:bg-white even:bg-[#fffdfa] align-top">
+                        <td className="border-l border-[#f0e5da] px-3 py-3 font-bold text-[#2f211c]">{requested?.inventoryItemName ?? "-"}</td>
+                        <td className="border-l border-[#f0e5da] px-3 py-3 text-[#2f211c]">{requested ? formatNumber(requested.quantity) : "-"}</td>
+                        <td className="border-l border-[#f0e5da] px-3 py-3 text-[#2f211c]">{requested ? formatNumber(requested.receivedQuantity) : "-"}</td>
+                        <td className="border-l border-[#f0e5da] px-3 py-3 font-bold text-[#7a3b24]">{requested ? formatNumber(requested.remainingQuantity) : "-"}</td>
+                        <td className="border-l border-[#f0e5da] px-3 py-3 text-[#2f211c]">{requested?.unitCode ?? "-"}</td>
+                        <td className="border-l border-[#f0e5da] px-3 py-3"><span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-800">{requested ? purchaseRequestItemDecisionStatusLabels[requested.decisionStatus] : "-"}</span></td>
+                        <td className="border-l border-[#f0e5da] px-3 py-3"><span className={`rounded-md border px-2 py-1 text-xs font-bold ${requested ? receivingStatusTone(requested.receivingStatus) : "border-[#e4d8c8] bg-white text-[#4a3b34]"}`}>{requested ? receivingStatusLabel(requested.receivingStatus) : "-"}</span></td>
+                        <td className="border-l border-[#f0e5da] px-3 py-3"><input type="number" min="0" max={requested?.remainingQuantity ?? undefined} step="0.001" disabled={isComplete} value={line.quantity || ""} onChange={(event) => updateReceiveLine(index, { quantity: event.target.value ? Number(event.target.value) : 0 })} className="h-10 w-full rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 text-[#181818] outline-none disabled:bg-[#f1eee9] disabled:text-[#7c6b60]" /></td>
+                        <td className="border-l border-[#f0e5da] px-3 py-3"><input type="number" min="0" step="0.001" disabled={isComplete} value={line.unitPrice || ""} onChange={(event) => updateReceiveLine(index, { unitPrice: event.target.value ? Number(event.target.value) : 0 })} className="h-10 w-full rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 text-[#181818] outline-none disabled:bg-[#f1eee9] disabled:text-[#7c6b60]" /></td>
+                        <td className="px-3 py-3 font-semibold text-[#2f211c]">{formatCurrency(line.quantity * line.unitPrice)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-4 rounded-md border border-[#e4d8c8] bg-[#fffdfa]">
+              <div className="border-b border-[#eee4d8] px-3 py-2 font-bold text-[#2f211c]">سجل دفعات الاستلام</div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[760px] border-collapse text-right text-xs">
+                  <thead className="bg-[#fbfaf7] text-[#4a3b34]"><tr><th className="border-l border-[#e6dacd] px-3 py-2">التاريخ</th><th className="border-l border-[#e6dacd] px-3 py-2">المادة</th><th className="border-l border-[#e6dacd] px-3 py-2">الكمية</th><th className="border-l border-[#e6dacd] px-3 py-2">المستخدم</th><th className="px-3 py-2">المرجع</th></tr></thead>
+                  <tbody className="divide-y divide-[#eee4d8]">
+                    {receiveRequest.items.flatMap((item) => item.receivingHistory.map((entry) => ({ item, entry }))).map(({ item, entry }) => (
+                      <tr key={entry.id} className="odd:bg-white even:bg-[#fffdfa]">
+                        <td className="border-l border-[#f0e5da] px-3 py-2 text-[#2f211c]">{formatDateTime(entry.receivedAt)}</td>
+                        <td className="border-l border-[#f0e5da] px-3 py-2 font-semibold text-[#2f211c]">{item.inventoryItemName}</td>
+                        <td className="border-l border-[#f0e5da] px-3 py-2 text-[#2f211c]">{formatNumber(entry.quantity)} {entry.unitCode}</td>
+                        <td className="border-l border-[#f0e5da] px-3 py-2 text-[#2f211c]">{entry.receivedBy}</td>
+                        <td className="px-3 py-2 font-semibold text-[#2f211c]" dir="ltr">{entry.reference}</td>
+                      </tr>
+                    ))}
+                    {receiveRequest.items.every((item) => item.receivingHistory.length === 0) ? <tr><td colSpan={5} className="px-3 py-4 text-center text-[#4a3b34]">لا توجد دفعات استلام سابقة لهذا الطلب</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
             <textarea value={receiveForm.notes} onChange={(event) => setReceiveForm((current) => current ? { ...current, notes: event.target.value } : current)} placeholder="ملاحظات الاستلام" className="mt-3 min-h-20 w-full rounded-md border border-[#e4d8c8] bg-[#fbfaf7] p-3 text-sm outline-none" />
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#eee4d8] pt-4"><p className="text-lg font-semibold text-[#2f211c]">إجمالي الفاتورة: {formatCurrency(receiveTotal)}</p><button disabled={isSaving} type="submit" className="inline-flex h-10 items-center gap-2 rounded-md bg-[#5d4032] px-4 text-sm font-semibold text-white disabled:opacity-50"><CheckCircle2 size={16} />تأكيد الاستلام</button></div>
           </form>

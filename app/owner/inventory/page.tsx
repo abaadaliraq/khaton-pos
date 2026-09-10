@@ -2,6 +2,7 @@
 
 import { Boxes, ClipboardList, PackageCheck, PackageX, Search, TrendingDown } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { AiInventoryMonitorPanel } from "@/components/inventory/AiInventoryMonitorPanel";
 import { formatCurrency } from "@/lib/formatCurrency";
 import { getInventoryOverview } from "@/services/inventoryService";
 import { getInventoryRequisitions } from "@/services/inventoryRequisitionService";
@@ -406,6 +407,8 @@ export default function OwnerInventoryPage() {
             <SummaryCard title="عدد المواد منخفضة المخزون" value={formatNumber(totals.lowStockCount)} icon={TrendingDown} />
             <SummaryCard title="عدد المواد النافدة" value={formatNumber(totals.outOfStockCount)} icon={PackageX} />
           </section>
+
+          <AiInventoryMonitorPanel />
 
           <section className="rounded-md border border-[#e4d8c8] bg-white p-4 shadow-sm">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_240px]">

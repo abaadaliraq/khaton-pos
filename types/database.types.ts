@@ -516,6 +516,20 @@ export type Database = {
         Args: { p_counted_cash: number; p_closing_note?: string | null; p_cashier_id?: string | null };
         Returns: Json;
       };
+      emergency_close_cash_shift: {
+        Args: { p_shift_id: string; p_counted_cash: number; p_reason: string };
+        Returns: Json;
+      };
+      pay_purchase: {
+        Args: {
+          p_purchase_id: string;
+          p_payment_method: string;
+          p_reference_number?: string | null;
+          p_notes?: string | null;
+          p_cash_shift_id?: string | null;
+        };
+        Returns: Json;
+      };
       create_staff_member: {
         Args: {
           p_full_name: string;

@@ -82,6 +82,8 @@ const actionLabels: Record<string, string> = {
   close_cash_shift: "إغلاق وردية صندوق",
   create_purchase_request: "إنشاء طلب شراء",
   decide_purchase_request: "اتخاذ قرار طلب شراء",
+  "الموافقة على طلب شراء": "الموافقة على طلب شراء",
+  "رفض طلب شراء": "رفض طلب شراء",
   create_inventory_purchase: "تسجيل شراء / استلام",
   pay_purchase: "تسجيل دفعة مورد",
   report_snapshot_created: "حفظ تقرير",
@@ -137,6 +139,11 @@ const fieldLabels: Record<string, string> = {
   table_session_id: "جلسة الطاولة",
   purchase_id: "عملية الشراء",
   purchase_request_id: "طلب الشراء",
+  request_number: "رقم الطلب",
+  decision_by: "صاحب القرار",
+  decision_at: "وقت القرار",
+  decision_notes: "ملاحظات القرار",
+  rejection_reason: "سبب الرفض",
   requisition_id: "طلب المواد",
   report_type: "نوع التقرير",
   period_type: "الفترة",
@@ -247,12 +254,18 @@ const sourceLabels: Record<string, string> = {
 };
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("ar-IQ", { dateStyle: "medium", timeStyle: "short", timeZone: baghdadTimeZone }).format(new Date(value));
+  return formatDateAndTimeParts(value).value;
 }
 
 function formatDateAndTimeParts(value: string) {
-  const date = new Intl.DateTimeFormat("ar-IQ", { dateStyle: "short", timeZone: baghdadTimeZone }).format(new Date(value));
-  const time = new Intl.DateTimeFormat("ar-IQ", { timeStyle: "short", timeZone: baghdadTimeZone }).format(new Date(value));
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) return { date: "—", time: "—", value: "—" };
+  const date = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: baghdadTimeZone }).format(parsedDate);
+  const timeParts = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: baghdadTimeZone }).formatToParts(parsedDate);
+  const hour = timeParts.find((part) => part.type === "hour")?.value ?? "00";
+  const minute = timeParts.find((part) => part.type === "minute")?.value ?? "00";
+  const period = timeParts.find((part) => part.type === "dayPeriod")?.value === "PM" ? "م" : "ص";
+  const time = `${hour}:${minute} ${period}`;
   return { date, time, value: `${date} — ${time}` };
 }
 
@@ -301,7 +314,7 @@ function formatValue(value: Json | undefined, key: string, references: Record<st
     if (references[value]) return references[value];
     if (isUuid(value)) return "مرجع غير معروف";
     if (isIsoTimestamp(value)) return formatDateAndTimeParts(value).value;
-    if (isDateOnly(value)) return new Intl.DateTimeFormat("ar-IQ", { dateStyle: "short", timeZone: baghdadTimeZone }).format(new Date(`${value}T00:00:00+03:00`));
+    if (isDateOnly(value)) return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: baghdadTimeZone }).format(new Date(`${value}T00:00:00+03:00`));
     if (key.includes("payment_method") || key === "method") return paymentLabels[value] ?? value;
     if (key.includes("unit")) return unitLabels[value] ?? value;
     if (key === "status" || key.endsWith("_status")) return statusLabels[value] ?? value;
@@ -318,7 +331,9 @@ function formatValue(value: Json | undefined, key: string, references: Record<st
 }
 
 function actionLabel(action: string) {
-  return actionLabels[action] ?? "عملية غير مصنفة";
+  if (actionLabels[action]) return actionLabels[action];
+  if (/[\u0600-\u06FF]/.test(action)) return action;
+  return "عملية غير مصنفة";
 }
 
 function sectionLabel(log: AuditLog) {
@@ -577,11 +592,11 @@ export default function AuditPage() {
               <thead className="bg-[#fbfaf7] text-[#7c6b60]">
                 <tr>
                   <th className="px-3 py-3 font-medium">التاريخ والوقت</th>
+                  <th className="px-3 py-3 font-medium">نوع العملية</th>
                   <th className="px-3 py-3 font-medium">المستخدم</th>
                   <th className="px-3 py-3 font-medium">الدور / القسم</th>
                   <th className="px-3 py-3 font-medium">المرجع</th>
-                  <th className="px-3 py-3 font-medium">نوع العملية</th>
-                  <th className="px-3 py-3 font-medium">الوصف</th>
+                  <th className="px-3 py-3 font-medium">الملخص</th>
                   <th className="px-3 py-3 font-medium">التفاصيل</th>
                 </tr>
               </thead>
@@ -589,10 +604,10 @@ export default function AuditPage() {
                 {filteredLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-[#fffaf4]">
                     <td className="px-3 py-3 text-[#4a3b34]">{formatDateTime(log.createdAt)}</td>
+                    <td className="px-3 py-3 font-medium text-[#2f211c]">{actionLabel(log.action)}</td>
                     <td className="px-3 py-3 font-medium text-[#2f211c]">{userName(log)}</td>
                     <td className="px-3 py-3 text-[#4a3b34]">{roleLabels[log.user?.role ?? ""] ?? "-"} / {sectionLabel(log)}</td>
                     <td className="px-3 py-3 font-medium text-[#2f211c]">{humanReference(log) ?? "—"}</td>
-                    <td className="px-3 py-3 font-medium text-[#2f211c]">{actionLabel(log.action)}</td>
                     <td className="px-3 py-3 text-[#4a3b34]">{logDescription(log)}</td>
                     <td className="px-3 py-3"><button type="button" onClick={() => setSelectedLog(log)} className="inline-flex h-9 items-center gap-2 rounded-md border border-[#e4d8c8] px-3 text-sm text-[#4a3b34] hover:bg-[#f5eee6]"><Eye size={16} />عرض التفاصيل</button></td>
                   </tr>

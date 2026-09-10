@@ -4,11 +4,12 @@ import { Info, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CaptainHeader } from "@/components/captain/CaptainHeader";
+import { CaptainTableBoard } from "@/components/captain/CaptainTableBoard";
 import { CategoryTabs } from "@/components/captain/CategoryTabs";
 import { OrderPanel } from "@/components/captain/OrderPanel";
 import { ProductGrid } from "@/components/captain/ProductGrid";
 import { SendOrderDialog } from "@/components/captain/SendOrderDialog";
-import { TableSelector } from "@/components/captain/TableSelector";
+import { TableDetailsPanel } from "@/components/captain/TableDetailsPanel";
 import { OperationalToast } from "@/components/operational/OperationalToast";
 import { useOperationalNotifications } from "@/components/operational/useOperationalNotifications";
 import { createClient } from "@/lib/supabase/client";
@@ -17,8 +18,7 @@ import { getMenuCatalog } from "@/services/menuService";
 import { createRestaurantOrder, markOrderAwaitingPaymentByCaptain, releasePaidTable } from "@/services/orderService";
 import { getRestaurantTables } from "@/services/tableService";
 import type { Category, MenuItem, OrderItem, RestaurantTable } from "@/types/pos";
-
-export type CaptainTheme = "light" | "dark";
+import type { CaptainTablePresentationStatus } from "@/components/captain/CaptainTableBoard";
 
 function getBaghdadTime() {
   return new Intl.DateTimeFormat("ar-IQ", {
@@ -39,10 +39,11 @@ export function CaptainPosApp() {
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-  const [isTableSelectorOpen, setIsTableSelectorOpen] = useState(false);
   const [isOrderSheetOpen, setIsOrderSheetOpen] = useState(false);
   const [isSendDialogOpen, setIsSendDialogOpen] = useState(false);
   const [pendingTable, setPendingTable] = useState<RestaurantTable | null>(null);
+  const [detailsTable, setDetailsTable] = useState<RestaurantTable | null>(null);
+  const [tableStatusFilter, setTableStatusFilter] = useState<CaptainTablePresentationStatus>("all");
   const [successMessage, setSuccessMessage] = useState("");
   const [loadError, setLoadError] = useState("");
   const [noteItemId, setNoteItemId] = useState<string | null>(null);
@@ -50,7 +51,6 @@ export function CaptainPosApp() {
   const [isSendingOrder, setIsSendingOrder] = useState(false);
   const [confirmingServedOrderId, setConfirmingServedOrderId] = useState<string | null>(null);
   const [releasingTableId, setReleasingTableId] = useState<number | null>(null);
-  const [theme, setTheme] = useState<CaptainTheme>("light");
   const tablePromptTimerRef = useRef<number>(0);
   const tableRefreshTimerRef = useRef<number | null>(null);
 
@@ -64,6 +64,13 @@ export function CaptainPosApp() {
 
       const updatedTable = restaurantTables.find((table) => table.id === currentTable.id);
       return updatedTable?.canAddOrder ? updatedTable : null;
+    });
+    setDetailsTable((currentTable) => {
+      if (!currentTable) {
+        return null;
+      }
+
+      return restaurantTables.find((table) => table.id === currentTable.id) ?? null;
     });
   }, []);
 
@@ -157,17 +164,6 @@ export function CaptainPosApp() {
     };
   }, []);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const savedTheme = window.localStorage.getItem("khatoun-captain-theme");
-      if (savedTheme === "dark" || savedTheme === "light") {
-        setTheme(savedTheme);
-      }
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, []);
-
   const filteredItems = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
@@ -211,7 +207,6 @@ export function CaptainPosApp() {
     }
 
     if (selectedTable?.id === table.id) {
-      setIsTableSelectorOpen(false);
       return;
     }
 
@@ -221,7 +216,20 @@ export function CaptainPosApp() {
     }
 
     setSelectedTable(table);
-    setIsTableSelectorOpen(false);
+  }
+
+  function handleTableBoardSelect(table: RestaurantTable) {
+    if (table.status === "available") {
+      selectTable(table);
+      return;
+    }
+
+    setDetailsTable(table);
+  }
+
+  function addOrderFromDetails(table: RestaurantTable) {
+    selectTable(table);
+    setDetailsTable(null);
   }
 
   function confirmTableChange() {
@@ -233,7 +241,6 @@ export function CaptainPosApp() {
     setNoteItemId(null);
     setSelectedTable(pendingTable);
     setPendingTable(null);
-    setIsTableSelectorOpen(false);
   }
 
   function addItem(item: MenuItem) {
@@ -326,6 +333,7 @@ export function CaptainPosApp() {
 
       await reloadTables();
       setSelectedTable(null);
+      setDetailsTable(null);
       setIsSendDialogOpen(false);
       setIsOrderSheetOpen(false);
       setOrderItems([]);
@@ -389,35 +397,21 @@ export function CaptainPosApp() {
     router.replace("/login");
   }
 
-  function toggleTheme() {
-    setTheme((currentTheme) => {
-      const nextTheme = currentTheme === "dark" ? "light" : "dark";
-      window.localStorage.setItem("khatoun-captain-theme", nextTheme);
-      return nextTheme;
-    });
-  }
-
   return (
-    <div dir="rtl" data-theme={theme} className="captain-shell min-h-screen">
+    <div dir="rtl" data-theme="light" className="captain-shell min-h-screen">
       <CaptainHeader
         currentTime={currentTime}
-        theme={theme}
-        soundEnabled={notifications.soundEnabled}
-        soundNeedsActivation={notifications.soundNeedsActivation}
-        onToggleSound={notifications.toggleSound}
-        onToggleTheme={toggleTheme}
         onLogout={logout}
       />
 
-      <main className="mx-auto grid max-w-7xl gap-4 px-4 pb-24 pt-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:pb-6">
+      <main className="mx-auto grid max-w-[1500px] gap-4 px-4 pb-24 pt-4 xl:grid-cols-[minmax(0,1fr)_380px] xl:pb-6">
         <div className="min-w-0 space-y-4">
-          <TableSelector
+          <CaptainTableBoard
             tables={tables}
             selectedTable={selectedTable}
-            isOpen={isTableSelectorOpen}
-            onOpen={() => setIsTableSelectorOpen(true)}
-            onClose={() => setIsTableSelectorOpen(false)}
-            onSelect={selectTable}
+            activeFilter={tableStatusFilter}
+            onFilterChange={setTableStatusFilter}
+            onTableSelect={handleTableBoardSelect}
             onConfirmServed={confirmServed}
             onReleaseTable={releaseTable}
             confirmingServedOrderId={confirmingServedOrderId}
@@ -429,29 +423,6 @@ export function CaptainPosApp() {
               {loadError}
             </div>
           ) : null}
-
-          <section className="captain-card p-3">
-            <p className="captain-muted mb-2 text-xs">02 المنيو</p>
-            <div className="relative">
-              <Search className="captain-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" size={18} />
-              <input
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="ابحث عن صنف..."
-                className="captain-input h-12 w-full pr-10 pl-12"
-              />
-              {searchTerm ? (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm("")}
-                  className="captain-icon-button absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center"
-                  aria-label="مسح البحث"
-                >
-                  <X size={16} />
-                </button>
-              ) : null}
-            </div>
-          </section>
 
           <div className="relative">
             {!selectedTable ? (
@@ -466,6 +437,31 @@ export function CaptainPosApp() {
             ) : null}
             <div className={!selectedTable ? "pointer-events-none opacity-55" : "opacity-100"}>
               <section className="captain-card p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="captain-muted text-xs font-bold">02 المنيو</p>
+                    <h2 className="captain-heading text-xl font-black">اختيار الأصناف</h2>
+                  </div>
+                  <div className="relative min-w-64 flex-1 sm:max-w-md">
+                    <Search className="captain-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" size={18} />
+                    <input
+                      value={searchTerm}
+                      onChange={(event) => setSearchTerm(event.target.value)}
+                      placeholder="ابحث عن صنف..."
+                      className="captain-input h-12 w-full pr-10 pl-12"
+                    />
+                    {searchTerm ? (
+                      <button
+                        type="button"
+                        onClick={() => setSearchTerm("")}
+                        className="captain-icon-button absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center"
+                        aria-label="مسح البحث"
+                      >
+                        <X size={16} />
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
                 <CategoryTabs categories={categories} activeCategory={activeCategory} onChange={setActiveCategory} />
               </section>
 
@@ -494,6 +490,16 @@ export function CaptainPosApp() {
           onSend={() => setIsSendDialogOpen(true)}
         />
       </main>
+
+      <TableDetailsPanel
+        table={detailsTable}
+        onClose={() => setDetailsTable(null)}
+        onAddOrder={addOrderFromDetails}
+        onConfirmServed={confirmServed}
+        onReleaseTable={releaseTable}
+        confirmingServedOrderId={confirmingServedOrderId}
+        releasingTableId={releasingTableId}
+      />
 
       {successMessage ? (
         <div className="fixed left-4 right-4 top-20 z-[70] mx-auto max-w-md rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-center font-bold text-emerald-600 shadow-sm">

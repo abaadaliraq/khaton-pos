@@ -12,6 +12,7 @@ import { getInventoryOverview } from "@/services/inventoryService";
 import { getInventoryWasteReports } from "@/services/inventoryWasteService";
 import { getOwnerFinanceData } from "@/services/ownerFinanceService";
 import { getPurchaseRequests, getPurchases } from "@/services/purchaseService";
+import { generateTablePerformanceReport } from "@/services/reportsService";
 import type { DailyRevenuePoint, MenuItemSalesReport, SalesReportSummary } from "@/types/adminReports";
 import type { InventoryItem, InventoryUnitCode } from "@/types/inventory";
 
@@ -216,6 +217,49 @@ function TopItemsTable({ items }: { items: MenuItemSalesReport[] }) {
   );
 }
 
+function OwnerTablePerformanceMiniTable({ rows }: { rows: { table: string; sessions: number; sales: string }[] }) {
+  return (
+    <section className="overflow-hidden rounded-md border border-white/[0.08] bg-[#343434] shadow-[0_18px_34px_rgba(0,0,0,0.14)]">
+      <div className="flex items-center justify-between gap-3 border-b border-white/10 p-4">
+        <div>
+          <h2 className="font-semibold text-white">أداء الطاولات اليوم</h2>
+          <p className="mt-1 text-xs text-zinc-400">أفضل 5 طاولات حسب المبيعات المدفوعة.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { window.location.href = "/owner/reports?report=table_performance&period=daily"; }}
+          className="rounded-md border border-[#ff5656]/40 px-3 py-2 text-xs font-bold text-[#ffb0b0] hover:bg-[#ff5656]/10"
+        >
+          عرض تقرير الطاولات
+        </button>
+      </div>
+      {rows.length === 0 ? <div className="p-4"><EmptyPanel message="لا توجد جلسات طاولات اليوم." /></div> : null}
+      {rows.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] text-right text-sm">
+            <thead className="bg-white/[0.04] text-zinc-300">
+              <tr>
+                <th className="px-3 py-3 font-semibold">الطاولة</th>
+                <th className="px-3 py-3 font-semibold">الجلسات</th>
+                <th className="px-3 py-3 font-semibold">المبيعات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/10">
+              {rows.map((row) => (
+                <tr key={row.table} className="hover:bg-white/[0.04]">
+                  <td className="px-3 py-3 font-medium text-white">{row.table}</td>
+                  <td className="px-3 py-3 text-zinc-300">{formatNumber(row.sessions)}</td>
+                  <td className="px-3 py-3 font-semibold text-white">{row.sales}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function AttentionPanel({ alerts }: { alerts: string[] }) {
   if (alerts.length === 0) return null;
 
@@ -315,6 +359,11 @@ export default function OwnerPage() {
   const [cashShiftDifferenceCount, setCashShiftDifferenceCount] = useState(0);
   const [topWasteDepartment, setTopWasteDepartment] = useState("لا توجد بيانات");
   const [topConsumedMaterial, setTopConsumedMaterial] = useState("لا توجد بيانات");
+  const [tableSalesToday, setTableSalesToday] = useState(0);
+  const [tableSessionsToday, setTableSessionsToday] = useState(0);
+  const [topUsedTableToday, setTopUsedTableToday] = useState("لا توجد بيانات");
+  const [topSalesTableToday, setTopSalesTableToday] = useState("لا توجد بيانات");
+  const [tablePerformanceRows, setTablePerformanceRows] = useState<{ table: string; sessions: number; sales: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -323,7 +372,7 @@ export default function OwnerPage() {
 
     async function loadOverview() {
       try {
-        const [todayReport, yesterdayReport, monthReport, sevenDaysReport, financeData, inventoryData, purchaseRequests, purchases, wasteReports, cashShifts, inventoryAnalytics] = await Promise.all([
+        const [todayReport, yesterdayReport, monthReport, sevenDaysReport, financeData, inventoryData, purchaseRequests, purchases, wasteReports, cashShifts, inventoryAnalytics, tablePerformanceReport] = await Promise.all([
           getAdminSalesReport({ from: today, to: today, today }),
           getAdminSalesReport({ from: yesterday, to: yesterday, today }),
           getAdminSalesReport({ from: monthFrom, to: today, today }),
@@ -335,6 +384,7 @@ export default function OwnerPage() {
           getInventoryWasteReports(),
           getRecentCashShifts(),
           getInventoryAnalytics({ startDate: today, endDate: today }),
+          generateTablePerformanceReport({ periodType: "daily", startDate: today, endDate: today, timezone: "Asia/Baghdad" }),
         ]);
 
         if (!isMounted) return;
@@ -366,6 +416,14 @@ export default function OwnerPage() {
         const mostConsumed = [...inventoryAnalytics.items]
           .map((item) => ({ item, quantity: item.recipeConsumption.quantity + item.issues.quantity }))
           .sort((a, b) => b.quantity - a.quantity)[0];
+        const tableRows = (tablePerformanceReport.payload.summaryRows as {
+          tableLabel: string;
+          sessionCount: number;
+          paidSales: number;
+        }[] | undefined) ?? [];
+        const usedTableRows = tableRows.filter((row) => row.sessionCount > 0);
+        const topUsageTable = [...usedTableRows].sort((first, second) => second.sessionCount - first.sessionCount)[0];
+        const topRevenueTable = [...usedTableRows].sort((first, second) => second.paidSales - first.paidSales)[0];
 
         setTodaySummary(todayReport.summary);
         setYesterdaySummary(yesterdayReport.summary);
@@ -391,6 +449,14 @@ export default function OwnerPage() {
         setCashShiftDifferenceCount(cashShifts.filter((shift) => shift.status === "closed" && shift.businessDate === today && typeof shift.cashDifference === "number" && shift.cashDifference !== 0).length);
         setTopWasteDepartment([...wasteByDestination.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "لا توجد بيانات");
         setTopConsumedMaterial(mostConsumed && mostConsumed.quantity > 0 ? `${mostConsumed.item.nameAr} / ${formatQuantity(mostConsumed.quantity, mostConsumed.item.baseUnitCode)}` : "لا توجد بيانات");
+        setTableSalesToday(usedTableRows.reduce((total, row) => total + row.paidSales, 0));
+        setTableSessionsToday(usedTableRows.reduce((total, row) => total + row.sessionCount, 0));
+        setTopUsedTableToday(topUsageTable ? `${topUsageTable.tableLabel} / ${formatNumber(topUsageTable.sessionCount)} جلسة` : "لا توجد بيانات");
+        setTopSalesTableToday(topRevenueTable ? `${topRevenueTable.tableLabel} / ${formatCurrency(topRevenueTable.paidSales)}` : "لا توجد بيانات");
+        setTablePerformanceRows([...usedTableRows]
+          .sort((first, second) => second.paidSales - first.paidSales)
+          .slice(0, 5)
+          .map((row) => ({ table: row.tableLabel, sessions: row.sessionCount, sales: formatCurrency(row.paidSales) })));
         setErrorMessage(financeData.errors.length > 0 ? "تعذر تحميل بعض مؤشرات لوحة المالك." : "");
       } catch (error) {
         console.error("Failed to load owner overview", error);
@@ -411,7 +477,7 @@ export default function OwnerPage() {
     const nextAlerts: string[] = [];
     if (outOfStockCount > 0) nextAlerts.push(`${formatNumber(outOfStockCount)} مواد نافدة`);
     if (lowStockCount > 0) nextAlerts.push(`${formatNumber(lowStockCount)} مواد منخفضة`);
-    if (pendingRequestCount > 0) nextAlerts.push(`${formatNumber(pendingRequestCount)} طلبات شراء معلقة`);
+    if (pendingRequestCount > 0) nextAlerts.push(`${formatNumber(pendingRequestCount)} طلبات شراء بانتظار قرار المدير`);
     if (unpaidPurchaseCount > 0) nextAlerts.push(`${formatNumber(unpaidPurchaseCount)} فواتير موردين غير مدفوعة`);
     return nextAlerts;
   }, [lowStockCount, outOfStockCount, pendingRequestCount, unpaidPurchaseCount]);
@@ -443,12 +509,16 @@ export default function OwnerPage() {
             <KpiCard title="قيمة المخزون الحالية" value={formatCurrency(inventoryValue)} helper="حسب متوسط التكلفة الحالي" icon={Boxes} />
             <KpiCard title="مواد منخفضة" value={formatNumber(lowStockCount)} helper="اضغط لعرض المواد المنخفضة" icon={AlertTriangle} onClick={() => setStockDialog("low")} />
             <KpiCard title="مواد نافدة" value={formatNumber(outOfStockCount)} helper="اضغط لعرض المواد النافدة" icon={Boxes} onClick={() => setStockDialog("out")} />
-            <KpiCard title="طلبات تحتاج متابعة" value={formatNumber(pendingRequestCount)} helper="طلبات شراء Pending" icon={ClipboardList} />
+            <KpiCard title="طلبات بانتظار قرار المدير" value={formatNumber(pendingRequestCount)} helper="طلبات شراء من المخزن لم يصدر قرارها بعد" icon={ClipboardList} />
             <KpiCard title="هدر اليوم" value={formatNumber(wasteTodayCount)} helper="اضغط لفتح سجل الهدر والتلف" icon={AlertTriangle} onClick={() => { window.location.href = "/owner/waste"; }} />
             <KpiCard title="أكثر قسم هدر اليوم" value={topWasteDepartment} helper="حسب عدد مواد الهدر المسجلة" icon={BarChart3} />
             <KpiCard title="أكثر مادة استهلاكاً اليوم" value={topConsumedMaterial} helper="وصفات + صرف داخلي، دون خلط وحدات" icon={BarChart3} />
             <KpiCard title="ورديات صندوق مفتوحة" value={formatNumber(openCashShiftCount)} helper="اضغط لإدارة ورديات الكاشير" icon={WalletCards} onClick={() => { window.location.href = "/owner/cash-shifts"; }} />
             <KpiCard title="فروقات ورديات اليوم" value={formatNumber(cashShiftDifferenceCount)} helper="ورديات مغلقة بفرق نقدي" icon={WalletCards} onClick={() => { window.location.href = "/owner/cash-shifts"; }} />
+            <KpiCard title="مبيعات الطاولات اليوم" value={formatCurrency(tableSalesToday)} helper="مدفوعات مكتملة ضمن جلسات الطاولات" icon={BarChart3} onClick={() => { window.location.href = "/owner/reports?report=table_performance&period=daily"; }} />
+            <KpiCard title="جلسات الطاولات اليوم" value={formatNumber(tableSessionsToday)} helper="حسب جلسات الطاولات الفعلية" icon={ClipboardList} onClick={() => { window.location.href = "/owner/reports?report=table_performance&period=daily"; }} />
+            <KpiCard title="أكثر طاولة استخداماً اليوم" value={topUsedTableToday} helper="حسب عدد الجلسات" icon={BarChart3} onClick={() => { window.location.href = "/owner/reports?report=table_performance&period=daily"; }} />
+            <KpiCard title="أعلى طاولة مبيعات اليوم" value={topSalesTableToday} helper="حسب المبيعات المدفوعة" icon={TrendingUp} onClick={() => { window.location.href = "/owner/reports?report=table_performance&period=daily"; }} />
           </section>
 
           <section className="rounded-md border border-white/[0.08] bg-[#343434] p-4 shadow-[0_18px_34px_rgba(0,0,0,0.14)]">
@@ -463,6 +533,7 @@ export default function OwnerPage() {
             <TopItemsTable items={topItems} />
             <AttentionPanel alerts={alerts} />
           </div>
+          <OwnerTablePerformanceMiniTable rows={tablePerformanceRows} />
         </>
       )}
       {stockDialog ? (

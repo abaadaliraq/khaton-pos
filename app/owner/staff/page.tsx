@@ -3,15 +3,30 @@
 import { Search, UserCheck, UserRoundX, UsersRound, UserCog } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useStaffMembers } from "@/hooks/useStaffMembers";
-import type { StaffDepartment, StaffMember, StaffStatus } from "@/types/staff";
+import type { StaffDepartment, StaffMember, StaffStatus, SystemRole } from "@/types/staff";
 import { departmentLabels, staffStatusLabels } from "@/types/staff";
 
 type StaffActivityFilter = "all" | "active" | "inactive";
 
 const departments: StaffDepartment[] = ["service", "cashier", "kitchen", "management", "cleaning", "barista", "shisha", "inventory", "finance", "other"];
+const baghdadTimeZone = "Asia/Baghdad";
+const systemRoleLabels: Record<SystemRole, string> = {
+  captain: "الكابتن",
+  cashier: "الكاشير",
+  kitchen: "المطبخ",
+  barista: "الباريستا",
+  admin: "مدير النظام",
+  storekeeper: "مسؤول المخزن",
+  accountant: "المحاسب",
+};
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(Number.isFinite(value) ? value : 0);
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("ar-IQ", { dateStyle: "medium", timeZone: baghdadTimeZone }).format(new Date(value));
 }
 
 function normalize(value: string | null | undefined) {
@@ -28,6 +43,15 @@ function isActive(member: StaffMember) {
 
 function accessLabel(member: StaffMember) {
   return member.hasSystemAccess && member.profileId ? "نعم" : "لا";
+}
+
+function roleLabel(member: StaffMember) {
+  return member.profile?.role ? systemRoleLabels[member.profile.role] : "لا يوجد دور نظام";
+}
+
+function jobAndRoleLabel(member: StaffMember) {
+  if (!member.profile?.role) return member.jobTitle;
+  return `${member.jobTitle} / ${roleLabel(member)}`;
 }
 
 function statusTone(status: StaffStatus) {
@@ -77,26 +101,30 @@ function StaffTable({ staff }: { staff: StaffMember[] }) {
       {staff.length === 0 ? <div className="p-4"><EmptyState message="لا توجد سجلات عمال مطابقة للفلاتر الحالية." /></div> : null}
       {staff.length > 0 ? (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] border-collapse text-right text-sm">
+          <table className="w-full min-w-[1320px] border-collapse text-right text-sm">
             <thead className="bg-[#f5eee6] text-[#4a3b34]">
-              <tr>
+              <tr className="[&>th]:border-l [&>th]:border-[#e4d8c8] last:[&>th]:border-l-0">
                 <th className="px-3 py-3 font-semibold">رقم الموظف</th>
                 <th className="px-3 py-3 font-semibold">الاسم</th>
                 <th className="px-3 py-3 font-semibold">القسم</th>
                 <th className="px-3 py-3 font-semibold">الوظيفة / الدور</th>
                 <th className="px-3 py-3 font-semibold">الهاتف</th>
+                <th className="px-3 py-3 font-semibold">العنوان</th>
                 <th className="px-3 py-3 font-semibold">حالة الموظف</th>
                 <th className="px-3 py-3 font-semibold">حساب دخول للنظام</th>
+                <th className="px-3 py-3 font-semibold">اسم المستخدم</th>
+                <th className="px-3 py-3 font-semibold">تاريخ التعيين</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#eee4d8]">
               {staff.map((member) => (
-                <tr key={member.id} className="hover:bg-[#fffaf4]">
+                <tr key={member.id} className="hover:bg-[#fffaf4] [&>td]:border-l [&>td]:border-[#f0e4d6] last:[&>td]:border-l-0">
                   <td className="px-3 py-3 font-semibold text-[#5d4032]">#{member.employeeNumber}</td>
-                  <td className="px-3 py-3 font-medium text-[#2f211c]">{member.fullName}</td>
+                  <td className="max-w-[200px] whitespace-normal px-3 py-3 font-medium leading-6 text-[#2f211c]">{member.fullName}</td>
                   <td className="px-3 py-3 text-[#4a3b34]">{departmentLabels[member.department]}</td>
-                  <td className="px-3 py-3 text-[#4a3b34]">{member.jobTitle}</td>
+                  <td className="max-w-[220px] whitespace-normal px-3 py-3 leading-6 text-[#4a3b34]">{jobAndRoleLabel(member)}</td>
                   <td className="px-3 py-3 text-[#4a3b34]">{member.phone ?? "-"}</td>
+                  <td className="max-w-[240px] whitespace-normal px-3 py-3 leading-6 text-[#4a3b34]">{member.address ?? "-"}</td>
                   <td className="px-3 py-3">
                     <span className={"inline-flex rounded-md border px-2 py-1 text-xs font-semibold " + statusTone(member.status)}>
                       {staffStatusLabels[member.status]}
@@ -107,6 +135,8 @@ function StaffTable({ staff }: { staff: StaffMember[] }) {
                       {accessLabel(member)}
                     </span>
                   </td>
+                  <td className="px-3 py-3 text-[#4a3b34]">{member.profile?.username ?? "-"}</td>
+                  <td className="px-3 py-3 text-[#4a3b34]">{formatDate(member.hireDate)}</td>
                 </tr>
               ))}
             </tbody>
@@ -140,7 +170,15 @@ export default function OwnerStaffPage() {
   const filteredStaff = useMemo(() => {
     const query = normalize(search);
     return ownerVisibleStaff.filter((member) => {
-      const matchesSearch = !query || normalize(member.fullName).includes(query);
+      const searchable = [
+        member.fullName,
+        member.phone,
+        member.secondaryPhone,
+        member.address,
+        member.profile?.username,
+        String(member.employeeNumber),
+      ].map(normalize).join(" ");
+      const matchesSearch = !query || searchable.includes(query);
       const matchesDepartment = department === "all" || member.department === department;
       const matchesActivity = activity === "all" || (activity === "active" ? isActive(member) : !isActive(member));
       return matchesSearch && matchesDepartment && matchesActivity;
@@ -175,14 +213,14 @@ export default function OwnerStaffPage() {
                 <input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="بحث بالاسم"
-                  className="h-11 w-full rounded-md border border-[#e4d8c8] bg-[#fbfaf7] pr-10 pl-3 text-sm outline-none focus:border-[#a65f3f]"
+                  placeholder="بحث بالاسم / الهاتف / العنوان / المستخدم"
+                  className="h-11 w-full rounded-md border border-[#e4d8c8] bg-[#fbfaf7] pr-10 pl-3 text-sm text-[#2f211c] outline-none focus:border-[#a65f3f]"
                 />
               </label>
               <select
                 value={department}
                 onChange={(event) => setDepartment(event.target.value as "all" | StaffDepartment)}
-                className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 text-sm outline-none focus:border-[#a65f3f]"
+                className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 text-sm text-[#2f211c] outline-none focus:border-[#a65f3f]"
               >
                 <option value="all">كل الأقسام</option>
                 {departments.map((item) => (
@@ -192,7 +230,7 @@ export default function OwnerStaffPage() {
               <select
                 value={activity}
                 onChange={(event) => setActivity(event.target.value as StaffActivityFilter)}
-                className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 text-sm outline-none focus:border-[#a65f3f]"
+                className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 text-sm text-[#2f211c] outline-none focus:border-[#a65f3f]"
               >
                 <option value="all">كل الحالات</option>
                 <option value="active">فعال</option>

@@ -22,9 +22,61 @@ type ReportsCenterProps = {
 
 type PeriodSelection = ReportPeriodType | "previous_month";
 
-const reportTypes: ReportType[] = ["financial", "inventory", "material_consumption", "waste", "purchases", "cash_shifts"];
-const periodTypes: PeriodSelection[] = ["daily", "weekly", "monthly", "previous_month", "custom"];
+type TableSortMode = "number" | "most_used" | "top_sales" | "least_used" | "least_sales" | "top_average";
+type TableDetailsPayload = {
+  tableId: string;
+  tableLabel: string;
+  tableName: string | null;
+  sessionCount: number;
+  orderCount: number;
+  additionalOrderCount: number;
+  paidSales: number;
+  averageSessionValue: number;
+  averageDurationMinutes: number | null;
+  sessions: {
+    sessionId: string;
+    openedAt: string;
+    closedAt: string | null;
+    status: string;
+    durationMinutes: number | null;
+    orderCount: number;
+    additionalOrderCount: number;
+    paidSales: number;
+    captainName: string;
+    orders: {
+      roundNo: number;
+      orderNumber: number;
+      itemCount: number;
+      total: number;
+      paidSales: number;
+      status: string;
+    }[];
+  }[];
+  trend: { date: string; sessions: number; sales: string; additionalOrders: number }[];
+};
+
+const reportTypes: ReportType[] = ["financial", "inventory", "material_consumption", "waste", "purchases", "cash_shifts", "table_performance"];
+const periodTypes: PeriodSelection[] = ["daily", "weekly", "monthly", "previous_month", "yearly", "custom"];
 const periodLabels: Record<PeriodSelection, string> = { ...periodTypeLabels, previous_month: "الشهر السابق" };
+const tableSortLabels: Record<TableSortMode, string> = {
+  number: "رقم الطاولة",
+  most_used: "الأكثر استخداماً",
+  top_sales: "الأعلى مبيعات",
+  least_used: "الأقل استخداماً",
+  least_sales: "الأقل مبيعات",
+  top_average: "أعلى متوسط فاتورة",
+};
+
+function initialReportType() {
+  if (typeof window === "undefined") return "financial";
+  return new URLSearchParams(window.location.search).get("report") === "table_performance" ? "table_performance" : "financial";
+}
+
+function initialPeriodType() {
+  if (typeof window === "undefined") return "daily";
+  const queryPeriod = new URLSearchParams(window.location.search).get("period");
+  return queryPeriod && periodTypes.includes(queryPeriod as PeriodSelection) ? (queryPeriod as PeriodSelection) : "daily";
+}
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("ar-IQ", {
@@ -40,6 +92,14 @@ function formatDate(value: string) {
 
 function formatTime(value: string) {
   return new Intl.DateTimeFormat("ar-IQ", { timeZone: "Asia/Baghdad", timeStyle: "short" }).format(new Date(value));
+}
+
+function formatDuration(minutes: number | null) {
+  if (minutes === null || !Number.isFinite(minutes) || minutes < 0) return "-";
+  if (minutes < 60) return `${Math.round(minutes)} دقيقة`;
+  const hours = Math.floor(minutes / 60);
+  const remaining = Math.round(minutes % 60);
+  return remaining > 0 ? `${hours} ساعة و${remaining} دقيقة` : `${hours} ساعة`;
 }
 
 function todayKey() {
@@ -67,6 +127,30 @@ function resolvePeriodSelection(periodSelection: PeriodSelection, customStart: s
     return resolveReportRange("custom", startOfMonth(previousMonth), endOfMonth(previousMonth));
   }
   return resolveReportRange(periodSelection, customStart, customEnd);
+}
+
+function sortTableRows(rows: GeneratedReport["rows"], mode: TableSortMode) {
+  const copy = [...rows];
+  return copy.sort((first, second) => {
+    const firstNumber = Number(first.tableNumberRaw ?? 0);
+    const secondNumber = Number(second.tableNumberRaw ?? 0);
+    const firstSessions = Number(first.sessionCountRaw ?? 0);
+    const secondSessions = Number(second.sessionCountRaw ?? 0);
+    const firstSales = Number(first.salesRaw ?? 0);
+    const secondSales = Number(second.salesRaw ?? 0);
+    const firstAverage = Number(first.averageSessionValueRaw ?? 0);
+    const secondAverage = Number(second.averageSessionValueRaw ?? 0);
+    if (mode === "most_used") return secondSessions - firstSessions || firstNumber - secondNumber;
+    if (mode === "top_sales") return secondSales - firstSales || firstNumber - secondNumber;
+    if (mode === "least_used") return firstSessions - secondSessions || firstNumber - secondNumber;
+    if (mode === "least_sales") {
+      const firstUsed = firstSessions > 0 ? 0 : 1;
+      const secondUsed = secondSessions > 0 ? 0 : 1;
+      return firstUsed - secondUsed || firstSales - secondSales || firstNumber - secondNumber;
+    }
+    if (mode === "top_average") return secondAverage - firstAverage || firstNumber - secondNumber;
+    return firstNumber - secondNumber;
+  });
 }
 
 function printCurrentReport() {
@@ -162,6 +246,107 @@ function SummaryStrip({ summary }: { summary: GeneratedReport["summary"] }) {
   );
 }
 
+function TableDetailsModal({ details, onClose }: { details: TableDetailsPayload; onClose: () => void }) {
+  const orderRows = details.sessions.flatMap((session) =>
+    session.orders.map((order) => ({
+      session: formatDate(session.openedAt),
+      round: order.roundNo > 1 ? `طلب إضافي ${order.roundNo}` : "الطلب الأول",
+      orderNumber: `ORD-${order.orderNumber}`,
+      itemCount: order.itemCount,
+      total: new Intl.NumberFormat("ar-IQ").format(order.total),
+      paidSales: new Intl.NumberFormat("ar-IQ").format(order.paidSales),
+      status: order.status,
+    })),
+  );
+
+  return (
+    <div className="print-hidden fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+      <section className="max-h-[90vh] w-full max-w-6xl overflow-hidden border border-[#aa9784] bg-[#fffdf8] text-[#181818] shadow-2xl" dir="rtl">
+        <div className="flex items-center justify-between border-b border-[#d4c5b4] bg-[#f0e7dc] px-4 py-3">
+          <div>
+            <p className="text-xs font-black text-[#a65f3f]">تفاصيل أداء الطاولة</p>
+            <h2 className="text-xl font-black text-[#181818]">{details.tableLabel}{details.tableName ? ` / ${details.tableName}` : ""}</h2>
+          </div>
+          <button type="button" onClick={onClose} className="border border-[#c9b8a6] bg-white p-2 text-[#181818]" title="إغلاق">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="max-h-[78vh] space-y-4 overflow-auto p-4">
+          <SummaryStrip
+            summary={{
+              "عدد الجلسات": details.sessionCount,
+              "إجمالي المبيعات": new Intl.NumberFormat("ar-IQ").format(details.paidSales),
+              "متوسط الجلسة": new Intl.NumberFormat("ar-IQ").format(details.averageSessionValue),
+              "متوسط المدة": formatDuration(details.averageDurationMinutes),
+              "عدد الطلبات": details.orderCount,
+              "الطلبات الإضافية": details.additionalOrderCount,
+            }}
+          />
+          <section>
+            <h3 className="mb-2 text-sm font-black">سجل الجلسات</h3>
+            <ReportTable
+              compact
+              columns={[
+                { key: "date", label: "التاريخ" },
+                { key: "openedAt", label: "وقت الفتح" },
+                { key: "closedAt", label: "وقت الإغلاق" },
+                { key: "duration", label: "مدة الجلسة" },
+                { key: "orders", label: "عدد الطلبات" },
+                { key: "additions", label: "عدد الإضافات" },
+                { key: "sales", label: "قيمة الجلسة" },
+                { key: "captain", label: "الكابتن" },
+                { key: "status", label: "حالة الجلسة" },
+              ]}
+              rows={details.sessions.map((session) => ({
+                date: formatDate(session.openedAt),
+                openedAt: formatTime(session.openedAt),
+                closedAt: session.closedAt ? formatTime(session.closedAt) : "-",
+                duration: formatDuration(session.durationMinutes),
+                orders: session.orderCount,
+                additions: session.additionalOrderCount,
+                sales: new Intl.NumberFormat("ar-IQ").format(session.paidSales),
+                captain: session.captainName,
+                status: session.status,
+              }))}
+            />
+          </section>
+          <section>
+            <h3 className="mb-2 text-sm font-black">تفاصيل الطلبات داخل الجلسات</h3>
+            <ReportTable
+              compact
+              columns={[
+                { key: "session", label: "تاريخ الجلسة" },
+                { key: "round", label: "الجولة" },
+                { key: "orderNumber", label: "رقم الطلب" },
+                { key: "itemCount", label: "عدد الأصناف" },
+                { key: "total", label: "قيمة الطلب" },
+                { key: "paidSales", label: "المبيعات المدفوعة" },
+                { key: "status", label: "الحالة" },
+              ]}
+              rows={orderRows}
+            />
+          </section>
+          {details.trend.length > 0 ? (
+            <section>
+              <h3 className="mb-2 text-sm font-black">سلوك الطاولة خلال الفترة</h3>
+              <ReportTable
+                compact
+                columns={[
+                  { key: "date", label: "اليوم / التاريخ" },
+                  { key: "sessions", label: "عدد الجلسات" },
+                  { key: "sales", label: "المبيعات" },
+                  { key: "additionalOrders", label: "طلبات إضافية" },
+                ]}
+                rows={details.trend}
+              />
+            </section>
+          ) : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function ReportPaperHeader({ report }: { report: GeneratedReport }) {
   const mode = report.mode === "saved" ? `نسخة محفوظة - الإصدار ${report.version ?? "-"}` : "عرض مباشر";
   return (
@@ -186,14 +371,16 @@ function ReportPaperHeader({ report }: { report: GeneratedReport }) {
 }
 
 export function ReportsCenter({ audience }: ReportsCenterProps) {
-  const [reportType, setReportType] = useState<ReportType>("financial");
-  const [periodType, setPeriodType] = useState<PeriodSelection>("daily");
+  const [reportType, setReportType] = useState<ReportType>(initialReportType);
+  const [periodType, setPeriodType] = useState<PeriodSelection>(initialPeriodType);
   const [customStart, setCustomStart] = useState(todayKey());
   const [customEnd, setCustomEnd] = useState(todayKey());
   const [currentReport, setCurrentReport] = useState<GeneratedReport | null>(null);
   const [snapshots, setSnapshots] = useState<ReportSnapshot[]>([]);
   const [showHistory, setShowHistory] = useState(true);
   const [selectedMaterial, setSelectedMaterial] = useState<{ name: string; unit: string; rows: GeneratedReport["rows"] } | null>(null);
+  const [selectedTable, setSelectedTable] = useState<TableDetailsPayload | null>(null);
+  const [tableSort, setTableSort] = useState<TableSortMode>("number");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -201,6 +388,10 @@ export function ReportsCenter({ audience }: ReportsCenterProps) {
   const [errorMessage, setErrorMessage] = useState("");
 
   const resolvedRange = useMemo(() => resolvePeriodSelection(periodType, customStart, customEnd), [customEnd, customStart, periodType]);
+  const displayRows = useMemo(() => {
+    if (currentReport?.reportType !== "table_performance") return currentReport?.rows ?? [];
+    return sortTableRows(currentReport.rows, tableSort);
+  }, [currentReport, tableSort]);
 
   const loadSnapshots = useCallback(async () => {
     try {
@@ -300,13 +491,24 @@ export function ReportsCenter({ audience }: ReportsCenterProps) {
     });
   }
 
+  function openTableDetails(row: GeneratedReport["rows"][number]) {
+    if (currentReport?.reportType !== "table_performance" || typeof row.tableId !== "string") return;
+    const details = currentReport.payload.tableDetails as TableDetailsPayload[] | undefined;
+    const table = details?.find((candidate) => candidate.tableId === row.tableId);
+    if (table) setSelectedTable(table);
+  }
+
   return (
     <div className="reports-center -mx-4 -my-5 min-h-[calc(100vh-4rem)] bg-[#f5f0e8] px-3 pb-5 text-right text-[#181818] lg:-mx-6 lg:px-5" dir="rtl">
       <section className="print-hidden sticky top-[49px] z-30 border-b border-[#d4c5b4] bg-[#f5f0e8]/95 py-3 backdrop-blur">
         <div className="flex flex-wrap items-end gap-2">
           <label className="report-toolbar-field">
             نوع التقرير
-            <select value={reportType} onChange={(event) => setReportType(event.target.value as ReportType)}>
+            <select value={reportType} onChange={(event) => {
+              setReportType(event.target.value as ReportType);
+              setCurrentReport(null);
+              setSelectedTable(null);
+            }}>
               {reportTypes.map((type) => (
                 <option key={type} value={type}>{reportTypeLabels[type]}</option>
               ))}
@@ -331,6 +533,16 @@ export function ReportsCenter({ audience }: ReportsCenterProps) {
                 <input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} />
               </label>
             </>
+          ) : null}
+          {reportType === "table_performance" ? (
+            <label className="report-toolbar-field">
+              ترتيب الطاولات
+              <select value={tableSort} onChange={(event) => setTableSort(event.target.value as TableSortMode)}>
+                {(Object.keys(tableSortLabels) as TableSortMode[]).map((mode) => (
+                  <option key={mode} value={mode}>{tableSortLabels[mode]}</option>
+                ))}
+              </select>
+            </label>
           ) : null}
           <button type="button" onClick={handleGenerate} disabled={isGenerating} className="report-toolbar-button primary">
             <Search size={16} />
@@ -389,11 +601,14 @@ export function ReportsCenter({ audience }: ReportsCenterProps) {
                 <FileSpreadsheet size={18} />
                 <h2>جدول التفاصيل</h2>
               </div>
-              <div className={currentReport.reportType === "material_consumption" ? "report-clickable-table" : ""} onClick={(event) => {
+              <div className={currentReport.reportType === "material_consumption" || currentReport.reportType === "table_performance" ? "report-clickable-table" : ""} onClick={(event) => {
                 const rowIndex = (event.target as HTMLElement).closest("tr")?.getAttribute("data-row-index");
-                if (rowIndex !== null && rowIndex !== undefined) openMaterialDetails(currentReport.rows[Number(rowIndex)]);
+                if (rowIndex === null || rowIndex === undefined) return;
+                const row = displayRows[Number(rowIndex)];
+                if (currentReport.reportType === "material_consumption") openMaterialDetails(row);
+                if (currentReport.reportType === "table_performance") openTableDetails(row);
               }}>
-                <ReportTable columns={currentReport.columns} rows={currentReport.rows} />
+                <ReportTable columns={currentReport.columns} rows={displayRows} />
               </div>
             </section>
             {currentReport.sections.map((section) => (
@@ -493,6 +708,7 @@ export function ReportsCenter({ audience }: ReportsCenterProps) {
           </section>
         </div>
       ) : null}
+      {selectedTable ? <TableDetailsModal details={selectedTable} onClose={() => setSelectedTable(null)} /> : null}
     </div>
   );
 }

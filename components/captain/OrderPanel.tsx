@@ -37,6 +37,7 @@ function PanelContent({
 }: Omit<OrderPanelProps, "itemCount" | "isMobileOpen" | "onMobileOpen" | "onMobileClose">) {
   const canSend = Boolean(selectedTable) && orderItems.length > 0 && !isSendingOrder;
   const isAdditionalOrder = selectedTable?.status === "occupied";
+  const nextRound = selectedTable ? (selectedTable.sessionOrderCount ?? 0) + 1 : 1;
 
   return (
     <div className="flex h-full flex-col">
@@ -45,7 +46,22 @@ function PanelContent({
         <h2 className="captain-heading text-xl font-bold">
           {selectedTable ? `طاولة ${selectedTable.id}` : "لم تختر طاولة"}
         </h2>
-        {isAdditionalOrder ? <p className="captain-accent mt-1 text-sm font-bold">طلب إضافي</p> : null}
+        {isAdditionalOrder ? (
+          <p className="captain-accent mt-1 text-sm font-black">طلب إضافي · Round {nextRound}</p>
+        ) : selectedTable ? (
+          <p className="captain-muted mt-1 text-sm font-bold">طلب جديد</p>
+        ) : null}
+      </div>
+
+      <div className="captain-summary mt-3 grid grid-cols-2 gap-2 p-2 text-sm">
+        <div>
+          <p className="captain-muted text-xs">الأصناف</p>
+          <p className="captain-heading font-black tabular-nums">{orderItems.length}</p>
+        </div>
+        <div>
+          <p className="captain-muted text-xs">المجموع</p>
+          <p className="captain-accent font-black">{formatCurrency(subtotal)}</p>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto py-3">

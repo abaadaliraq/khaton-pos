@@ -2,6 +2,7 @@
 
 import { Printer, X } from "lucide-react";
 import Image from "next/image";
+import { createPortal } from "react-dom";
 import { formatCurrency } from "@/lib/formatCurrency";
 import type { PurchasePayment } from "@/types/finance";
 import { expensePaymentMethodLabels } from "@/types/finance";
@@ -44,12 +45,14 @@ export function PurchasePaymentVoucherDialog({ payment, onClose }: { payment: Pu
   const voucherNumber = purchasePaymentVoucherNumber(payment);
   const notes = payment.notes?.trim() || "لا توجد ملاحظات";
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="finance-payment-voucher-backdrop fixed inset-0 z-50 overflow-y-auto bg-black/45 p-4">
       <section className="finance-payment-voucher mx-auto w-full max-w-[210mm] rounded-md bg-white p-5 text-[#1c1c1c] shadow-2xl">
         <div className="finance-payment-voucher-actions mb-4 flex items-center justify-between gap-3">
           <button type="button" onClick={onClose} className="rounded-md border border-[#dedede] p-2 text-[#1c1c1c] hover:bg-[#f5f5f5]"><X size={16} /></button>
-          <button type="button" onClick={() => window.print()} className="inline-flex h-10 items-center gap-2 rounded-md bg-[#2c0000] px-4 text-sm font-semibold text-white hover:bg-[#430707]"><Printer size={16} />طباعة السند</button>
+          <button type="button" onClick={() => window.print()} className="inline-flex h-10 items-center gap-2 rounded-md bg-[#2c0000] px-4 text-sm font-semibold text-white hover:bg-[#430707] [&_*]:text-white"><Printer size={16} />طباعة السند</button>
         </div>
 
         <article className="finance-payment-voucher-paper overflow-hidden rounded-md border border-[#d8d8d8] bg-white p-8">
@@ -131,6 +134,7 @@ export function PurchasePaymentVoucherDialog({ payment, onClose }: { payment: Pu
           </footer>
         </article>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -1,21 +1,20 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, Lock, Plus, RefreshCw, Search, WalletCards, X } from "lucide-react";
+import { CheckCircle2, ShieldAlert, RefreshCw, Search, WalletCards, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/formatCurrency";
 import {
-  closeCashShift,
+  emergencyCloseCashShift,
   getCashierOptions,
   getCashShiftMovementSummaries,
-  getCurrentExpectedCash,
+  getExpectedCashForShift,
   getRecentCashShifts,
-  openCashShift,
 } from "@/services/financeService";
 import type { CashierOption, CashShift, CashShiftMovementSummary, ExpectedCashBreakdown } from "@/types/finance";
 
 type StatusFilter = "all" | CashShift["status"];
-type DialogState = "open" | "close" | null;
+type DialogState = "emergencyClose" | null;
 
 const statusLabels: Record<CashShift["status"], string> = {
   open: "مفتوحة",
@@ -45,11 +44,8 @@ export function CashShiftManagementPanel() {
   const [openExpected, setOpenExpected] = useState<Record<string, ExpectedCashBreakdown>>({});
   const [selectedShift, setSelectedShift] = useState<CashShift | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
-  const [cashierId, setCashierId] = useState("");
-  const [openingCash, setOpeningCash] = useState("");
-  const [openingNote, setOpeningNote] = useState("");
   const [countedCash, setCountedCash] = useState("");
-  const [closingNote, setClosingNote] = useState("");
+  const [emergencyReason, setEmergencyReason] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [cashierFilter, setCashierFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -71,14 +67,13 @@ export function CashShiftManagementPanel() {
       const expectedPairs = await Promise.all(
         nextShifts
           .filter((shift) => shift.status === "open")
-          .map(async (shift) => [shift.id, await getCurrentExpectedCash(shift.cashierId)] as const),
+          .map(async (shift) => [shift.id, await getExpectedCashForShift(shift.id)] as const),
       );
 
       setShifts(nextShifts);
       setCashiers(nextCashiers);
       setMovementSummaries(Object.fromEntries(summaries.map((summary) => [summary.shiftId, summary])));
       setOpenExpected(Object.fromEntries(expectedPairs.filter((pair): pair is readonly [string, ExpectedCashBreakdown] => pair[1] !== null)));
-      setCashierId((current) => current || nextCashiers[0]?.id || "");
     } catch (loadError) {
       console.error("Failed to load cash shifts", loadError);
       setError("تعذر تحميل ورديات الصندوق.");
@@ -139,46 +134,35 @@ export function CashShiftManagementPanel() {
   }
 
   function resetForms() {
-    setOpeningCash("");
-    setOpeningNote("");
     setCountedCash("");
-    setClosingNote("");
+    setEmergencyReason("");
     setSelectedShift(null);
     setDialog(null);
   }
 
-  async function submitOpenShift(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsSaving(true);
-    setError("");
-
-    try {
-      await openCashShift({ cashierId, openingCash: Number(openingCash), openingNote });
-      resetForms();
-      showMessage("تم فتح وردية الصندوق للكاشير المحدد.");
-      await loadData();
-    } catch (openError) {
-      console.error("Failed to open cash shift", openError);
-      setError(openError instanceof Error ? openError.message : "تعذر فتح الوردية.");
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function submitCloseShift(event: FormEvent<HTMLFormElement>) {
+  async function submitEmergencyClose(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedShift) return;
+    if (!emergencyReason.trim()) {
+      setError("سبب الإغلاق الاستثنائي مطلوب.");
+      return;
+    }
+
     setIsSaving(true);
     setError("");
 
     try {
-      await closeCashShift({ cashierId: selectedShift.cashierId, countedCash: Number(countedCash), closingNote });
+      await emergencyCloseCashShift({
+        shiftId: selectedShift.id,
+        countedCash: Number(countedCash),
+        reason: emergencyReason,
+      });
       resetForms();
-      showMessage("تم إغلاق وردية الصندوق وحفظ النقد المعدود والفارق.");
+      showMessage("تم تنفيذ الإغلاق الاستثنائي وحفظ السبب في سجل العمليات.");
       await loadData();
-    } catch (closeError) {
-      console.error("Failed to close cash shift", closeError);
-      setError(closeError instanceof Error ? closeError.message : "تعذر إغلاق الوردية.");
+    } catch (emergencyCloseError) {
+      console.error("Failed to emergency close cash shift", emergencyCloseError);
+      setError(emergencyCloseError instanceof Error ? emergencyCloseError.message : "تعذر تنفيذ الإغلاق الاستثنائي.");
     } finally {
       setIsSaving(false);
     }
@@ -193,7 +177,7 @@ export function CashShiftManagementPanel() {
           <WalletCards size={18} className="text-[#a65f3f]" />
           <div>
             <h2 className="font-semibold">إدارة ورديات الصندوق | {formatNumber(filteredShifts.length)} وردية</h2>
-            <p className="mt-1 text-xs text-[#7c6b60]">فتح وإغلاق ورديات الكاشير مع حفظ الكاشير وصاحب الإجراء.</p>
+            <p className="mt-1 text-xs text-[#7c6b60]">رقابة على ورديات الكاشير والحركات النقدية، مع إغلاق استثنائي للمدير/المالك عند الحاجة.</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -215,10 +199,6 @@ export function CashShiftManagementPanel() {
           <button type="button" onClick={() => void loadData()} className="flex h-9 items-center gap-2 rounded-md border border-[#e4d8c8] bg-white px-3 text-sm text-[#4a3b34] hover:bg-[#f5eee6]">
             <RefreshCw size={15} />
             تحديث
-          </button>
-          <button type="button" onClick={() => setDialog("open")} className="flex h-9 items-center gap-2 rounded-md bg-[#a65f3f] px-4 text-sm font-semibold text-white hover:bg-[#8f4e34]">
-            <Plus size={15} />
-            فتح وردية
           </button>
         </div>
       </section>
@@ -271,9 +251,9 @@ export function CashShiftManagementPanel() {
                     <td className="border-l border-[#f0e5da] px-3 py-2 text-[#4a3b34]">{shift.closedByName ?? shift.closedBy?.slice(0, 8) ?? "-"}</td>
                     <td className="px-3 py-2">
                       {shift.status === "open" ? (
-                        <button type="button" onClick={() => { setSelectedShift(shift); setDialog("close"); setCountedCash(String(openExpected[shift.id]?.expectedCash ?? "")); }} className="inline-flex h-8 items-center gap-2 rounded-md border border-[#e4d8c8] bg-white px-3 text-xs font-semibold text-[#4a3b34] hover:bg-[#f5eee6]">
-                          <Lock size={14} />
-                          إغلاق
+                        <button type="button" onClick={() => { setSelectedShift(shift); setDialog("emergencyClose"); setCountedCash(String(openExpected[shift.id]?.expectedCash ?? "")); setEmergencyReason(""); }} className="inline-flex h-8 items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-100">
+                          <ShieldAlert size={14} />
+                          إغلاق استثنائي
                         </button>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><CheckCircle2 size={14} /> مكتملة</span>
@@ -292,31 +272,12 @@ export function CashShiftManagementPanel() {
         </div>
       </section>
 
-      {dialog === "open" ? (
+      {dialog === "emergencyClose" && selectedShift ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
-          <form onSubmit={submitOpenShift} className="w-full max-w-lg rounded-md border border-white/10 bg-[#2f2f2f] p-4 text-white shadow-[0_30px_90px_rgba(0,0,0,0.45)]">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">فتح وردية كاشير</h3>
-              <button type="button" onClick={resetForms} className="rounded-md border border-white/10 p-2 text-zinc-300 hover:bg-white/10"><X size={16} /></button>
-            </div>
-            <div className="space-y-3">
-              <select required value={cashierId} onChange={(event) => setCashierId(event.target.value)} className="h-11 w-full rounded-md border border-white/10 bg-[#242424] px-3 text-sm text-white">
-                {cashiers.map((cashier) => <option key={cashier.id} value={cashier.id}>{cashier.name}</option>)}
-              </select>
-              <input required min="0" step="0.001" type="number" value={openingCash} onChange={(event) => setOpeningCash(event.target.value)} placeholder="الرصيد الافتتاحي" className="h-11 w-full rounded-md border border-white/10 bg-[#242424] px-3 text-sm text-white outline-none focus:border-[#ff5656]" />
-              <textarea value={openingNote} onChange={(event) => setOpeningNote(event.target.value)} placeholder="ملاحظة الفتح" className="min-h-24 w-full rounded-md border border-white/10 bg-[#242424] px-3 py-2 text-sm text-white outline-none focus:border-[#ff5656]" />
-            </div>
-            <button disabled={isSaving} type="submit" className="mt-4 h-11 w-full rounded-md bg-[#ff5656] text-sm font-semibold text-white disabled:opacity-60">فتح الوردية</button>
-          </form>
-        </div>
-      ) : null}
-
-      {dialog === "close" && selectedShift ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
-          <form onSubmit={submitCloseShift} className="w-full max-w-lg rounded-md border border-white/10 bg-[#2f2f2f] p-4 text-white shadow-[0_30px_90px_rgba(0,0,0,0.45)]">
+          <form onSubmit={submitEmergencyClose} className="w-full max-w-lg rounded-md border border-white/10 bg-[#2f2f2f] p-4 text-white shadow-[0_30px_90px_rgba(0,0,0,0.45)]">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold">إغلاق وردية الصندوق</h3>
+                <h3 className="text-lg font-semibold">إغلاق استثنائي للوردية</h3>
                 <p className="mt-1 text-xs text-zinc-400">{selectedShift.cashierName ?? selectedShift.cashierId}</p>
               </div>
               <button type="button" onClick={resetForms} className="rounded-md border border-white/10 p-2 text-zinc-300 hover:bg-white/10"><X size={16} /></button>
@@ -333,9 +294,9 @@ export function CashShiftManagementPanel() {
             </div>
             <div className="space-y-3">
               <input required min="0" step="0.001" type="number" value={countedCash} onChange={(event) => setCountedCash(event.target.value)} placeholder="النقد المعدود" className="h-11 w-full rounded-md border border-white/10 bg-[#242424] px-3 text-sm text-white outline-none focus:border-[#ff5656]" />
-              <textarea value={closingNote} onChange={(event) => setClosingNote(event.target.value)} placeholder="ملاحظة الإغلاق" className="min-h-24 w-full rounded-md border border-white/10 bg-[#242424] px-3 py-2 text-sm text-white outline-none focus:border-[#ff5656]" />
+              <textarea required value={emergencyReason} onChange={(event) => setEmergencyReason(event.target.value)} placeholder="سبب الإغلاق الاستثنائي" className="min-h-24 w-full rounded-md border border-white/10 bg-[#242424] px-3 py-2 text-sm text-white outline-none focus:border-[#ff5656]" />
             </div>
-            <button disabled={isSaving} type="submit" className="mt-4 h-11 w-full rounded-md bg-[#ff5656] text-sm font-semibold text-white disabled:opacity-60">إغلاق الوردية</button>
+            <button disabled={isSaving || !emergencyReason.trim()} type="submit" className="mt-4 h-11 w-full rounded-md bg-[#ff5656] text-sm font-semibold text-white disabled:opacity-60">تأكيد الإغلاق الاستثنائي</button>
           </form>
         </div>
       ) : null}

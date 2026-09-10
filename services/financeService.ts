@@ -6,9 +6,12 @@ import type {
   CashShift,
   CashierOption,
   CashShiftMovementSummary,
+  CashShiftMovement,
+  CashMovementType,
   CashShiftSummary,
   CloseCashShiftInput,
   CreateExpenseInput,
+  EmergencyCloseCashShiftInput,
   CustomerPayment,
   ExpectedCashBreakdown,
   Expense,
@@ -76,6 +79,21 @@ type CashMovementSummaryRow = {
   direction: "in" | "out";
   amount: number | string;
   voided_at: string | null;
+};
+
+type CashMovementRow = {
+  id: string;
+  shift_id: string;
+  direction: "in" | "out";
+  movement_type: CashMovementType;
+  amount: number | string;
+  source_type: "payment" | "expense" | "purchase_payment" | "manual";
+  source_id: string | null;
+  description: string | null;
+  created_by: string;
+  created_at: string;
+  voided_at: string | null;
+  created_by_profile: { full_name: string | null; username: string | null } | null;
 };
 
 type CashierProfileRow = {
@@ -179,6 +197,23 @@ function rowToCashShift(row: CashShiftRow): CashShift {
     closedBy: row.closed_by,
     closedByName: profileName(row.closed_by_profile),
     createdAt: row.created_at,
+  };
+}
+
+function rowToCashMovement(row: CashMovementRow): CashShiftMovement {
+  return {
+    id: row.id,
+    shiftId: row.shift_id,
+    direction: row.direction,
+    movementType: row.movement_type,
+    amount: asAmount(row.amount),
+    sourceType: row.source_type,
+    sourceId: row.source_id,
+    description: row.description,
+    createdBy: row.created_by,
+    createdByName: profileName(row.created_by_profile),
+    createdAt: row.created_at,
+    voidedAt: row.voided_at,
   };
 }
 
@@ -315,11 +350,21 @@ export async function getFinanceSalesSummary(): Promise<FinanceSalesSummary> {
 
 export async function getOpenCashShift(): Promise<CashShift | null> {
   const supabase = createClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (userError) {
+    logSupabaseError("[cash shifts current user]", userError);
+    throw userError;
+  }
+
+  const userId = userData.user?.id;
+  if (!userId) return null;
 
   const query = supabase
     .from("cash_shifts")
     .select(cashShiftSelect)
     .eq("status", "open")
+    .eq("cashier_id", userId)
     .order("opened_at", { ascending: false })
     .limit(1);
 
@@ -331,6 +376,22 @@ export async function getOpenCashShift(): Promise<CashShift | null> {
   }
 
   return data ? rowToCashShift(data as unknown as CashShiftRow) : null;
+}
+
+export async function getOpenCashShifts(): Promise<CashShift[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("cash_shifts")
+    .select(cashShiftSelect)
+    .eq("status", "open")
+    .order("opened_at", { ascending: false });
+
+  if (error) {
+    logSupabaseError("[cash shifts SELECT open all]", error);
+    throw error;
+  }
+
+  return ((data ?? []) as unknown as CashShiftRow[]).map(rowToCashShift);
 }
 
 export async function getCashierOptions(): Promise<CashierOption[]> {
@@ -359,7 +420,7 @@ export async function openCashShift(input: OpenCashShiftInput): Promise<CashShif
   const { data, error } = await supabase.rpc("open_cash_shift" as never, {
     p_opening_cash: input.openingCash,
     p_opening_note: clean(input.openingNote),
-    p_cashier_id: input.cashierId,
+    p_cashier_id: input.cashierId ?? null,
   } as never);
 
   if (error) {
@@ -421,6 +482,28 @@ export async function closeCashShift(input: CloseCashShiftInput): Promise<CashSh
   };
 }
 
+export async function emergencyCloseCashShift(input: EmergencyCloseCashShiftInput): Promise<CashShiftSummary> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("emergency_close_cash_shift" as never, {
+    p_shift_id: input.shiftId,
+    p_counted_cash: input.countedCash,
+    p_reason: input.reason.trim(),
+  } as never);
+
+  if (error) {
+    logSupabaseError("[cash shift RPC emergency_close_cash_shift]", error);
+    throw error;
+  }
+
+  const payload = data as CloseCashShiftPayload;
+  if (!payload.shift || !payload.expected) throw new Error("لم يرجع Supabase ملخص الإغلاق الاستثنائي");
+
+  return {
+    shift: rowToCashShift(payload.shift),
+    expected: payloadToExpectedCashBreakdown(payload.expected),
+  };
+}
+
 export async function getRecentCashShifts(): Promise<CashShift[]> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -461,4 +544,21 @@ export async function getCashShiftMovementSummaries(shiftIds: string[]): Promise
   }
 
   return shiftIds.map((shiftId) => summaries.get(shiftId) ?? { shiftId, cashIn: 0, cashOut: 0 });
+}
+
+export async function getCashShiftMovements(shiftId: string): Promise<CashShiftMovement[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("cash_movements")
+    .select("id, shift_id, direction, movement_type, amount, source_type, source_id, description, created_by, created_at, voided_at, created_by_profile:profiles!cash_movements_created_by_fkey(full_name, username)")
+    .eq("shift_id", shiftId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    logSupabaseError("[cash movements SELECT by shift]", error);
+    throw error;
+  }
+
+  return ((data ?? []) as unknown as CashMovementRow[]).map(rowToCashMovement);
 }

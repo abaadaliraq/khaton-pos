@@ -9,6 +9,8 @@ export type ManagementTopNavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
+  badge?: number;
+  badgeLabel?: string;
 };
 
 export function ManagementTopNav({ items }: { items: ManagementTopNavItem[] }) {
@@ -24,6 +26,11 @@ export function ManagementTopNav({ items }: { items: ManagementTopNavItem[] }) {
             <Link key={item.href} href={item.href} className={clsx("management-nav-link", active && "is-active")}>
               <Icon size={15} />
               <span className="truncate">{item.label}</span>
+              {typeof item.badge === "number" && item.badge > 0 ? (
+                <span className="rounded-full bg-[#ff5656] px-1.5 py-0.5 text-[10px] font-black leading-none text-white" title={item.badgeLabel}>
+                  {item.badge > 99 ? "99+" : item.badge}
+                </span>
+              ) : null}
             </Link>
           );
         })}

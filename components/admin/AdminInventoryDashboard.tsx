@@ -18,6 +18,7 @@ import {
 } from "@/services/inventoryService";
 import { createClient } from "@/lib/supabase/client";
 import { EquipmentMaintenancePanel } from "@/components/inventory/EquipmentMaintenancePanel";
+import { AiInventoryMonitorPanel } from "@/components/inventory/AiInventoryMonitorPanel";
 import { InventoryAnalyticsPanel } from "@/components/inventory/InventoryAnalyticsPanel";
 import { InventoryRequisitionsPanel } from "@/components/inventory/InventoryRequisitionsPanel";
 import { InventoryWastePanel } from "@/components/inventory/InventoryWastePanel";
@@ -28,6 +29,7 @@ import { getInventoryWasteReports } from "@/services/inventoryWasteService";
 import { getPurchaseRequests } from "@/services/purchaseService";
 import { deleteRecipeItem, getActiveRecipe, getCompatibleUnits, getOrCreateActiveRecipe, getRecipeSummaries, updateMenuItemInventoryTracking, upsertRecipeItem } from "@/services/recipeService";
 import { formatCurrency } from "@/lib/formatCurrency";
+import { purchaseRequestItemsSummary } from "@/lib/purchaseRequestDisplay";
 import type { ActiveRecipe, EquipmentAsset, InventoryItem, InventoryItemConversion, InventoryItemType, InventoryMovement, InventoryMovementType, InventoryRequisition, InventoryRequisitionDestination, InventoryUnit, InventoryWasteReport, RecipeItem, RecipeSummary } from "@/types/inventory";
 import type { PurchaseRequest } from "@/types/finance";
 
@@ -366,8 +368,8 @@ export function AdminInventoryDashboard() {
   const inventoryValue = items.reduce((total, item) => total + item.stockOnHand * item.averageCost, 0);
   const pendingRequisitions = overviewRequisitions.filter((requisition) => requisition.status === "pending");
   const pendingIssueRequisitions = overviewRequisitions.filter((requisition) => requisition.status === "approved");
-  const pendingPurchaseRequests = overviewPurchaseRequests.filter((request) => request.status === "pending");
-  const approvedPurchaseRequests = overviewPurchaseRequests.filter((request) => request.status === "approved");
+  const pendingPurchaseRequests = overviewPurchaseRequests.filter((request) => request.status === "pending" || request.status === "decision_in_progress");
+  const approvedPurchaseRequests = overviewPurchaseRequests.filter((request) => request.status === "approved" || request.status === "partially_approved");
   const wasteTodayCount = overviewWasteReports.filter((report) => new Date(report.postedAt).toLocaleDateString("en-CA", { timeZone: "Asia/Baghdad" }) === todayIso()).length;
   const overdueEquipment = overviewEquipmentAssets.filter((asset) => {
     const nextDate = latestEquipmentNextMaintenance(asset);
@@ -386,7 +388,7 @@ export function AdminInventoryDashboard() {
     ...movements.slice(0, 6).map((movement) => ({ id: `move-${movement.id}`, title: movementLabels[movement.movementType], helper: `${movement.inventoryItemName} / ${formatQuantity(movement.quantityDelta, movement.baseUnitCode)}`, at: movement.createdAt, tab: "movements" as ActiveTab })),
     ...overviewWasteReports.slice(0, 3).map((report) => ({ id: `waste-${report.id}`, title: "هدر / تلف", helper: `${report.reportCode} / ${formatNumber(report.items.length)} مواد`, at: report.postedAt, tab: "waste" as ActiveTab })),
     ...overviewRequisitions.slice(0, 3).map((request) => ({ id: `requisition-${request.id}`, title: "طلب صرف", helper: `${request.requestCode} / ${request.items.length} مواد`, at: request.requestedAt, tab: "requisitions" as ActiveTab })),
-    ...overviewPurchaseRequests.slice(0, 3).map((request) => ({ id: `purchase-${request.id}`, title: "طلب شراء", helper: `#${request.requestNumber} / ${request.items.length} مواد`, at: request.createdAt, tab: "purchaseRequests" as ActiveTab })),
+    ...overviewPurchaseRequests.slice(0, 3).map((request) => ({ id: `purchase-${request.id}`, title: "طلب شراء", helper: `#${request.requestNumber} / ${purchaseRequestItemsSummary(request)}`, at: request.createdAt, tab: "purchaseRequests" as ActiveTab })),
     ...overviewEquipmentAssets.flatMap((asset) =>
       asset.maintenanceRecords.slice(0, 2).map((record) => ({ id: `maintenance-${record.id}`, title: record.maintenanceType === "breakdown" ? "عطل معدات" : "صيانة معدات", helper: `${asset.assetCode} / ${asset.nameAr}`, at: record.completedAt ?? record.startedAt ?? record.reportedAt, tab: "equipment" as ActiveTab })),
     ),
@@ -548,6 +550,8 @@ export function AdminInventoryDashboard() {
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_waste_reports" }, scheduleReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_waste_items" }, scheduleReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_movements" }, scheduleReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_requests" }, scheduleReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_request_items" }, scheduleReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "purchase_items" }, scheduleReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "purchases" }, scheduleReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleReload)
@@ -995,6 +999,8 @@ export function AdminInventoryDashboard() {
             <InventoryStat title="عمليات هدر اليوم" value={formatNumber(wasteTodayCount)} helper="من سجل الهدر والتلف" icon={Trash2} onClick={() => selectTab("waste")} />
             <InventoryStat title="معدات تحتاج متابعة" value={formatNumber(equipmentFollowUpCount)} helper="أعطال أو صيانة متأخرة" icon={Wrench} onClick={() => selectTab("equipment")} />
           </div>
+
+          <AiInventoryMonitorPanel />
 
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
             <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">

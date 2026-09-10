@@ -10,8 +10,10 @@
   --kh-surface-alt: #f0e7dc;
   --kh-border: #d4c5b4;
   --kh-border-strong: #aa9784;
-  --kh-text: #181818;
-  --kh-muted: #51483f;
+  --kh-text: #181512;
+  --kh-secondary: #4f453c;
+  --kh-muted: #665c52;
+  --kh-soft: #766d64;
   --kh-accent: #c83333;
   --kh-danger: #b42318;
   --kh-success: #047857;
@@ -64,7 +66,9 @@
 }
 
 .report-toolbar-button:disabled {
-  opacity: 0.48;
+  background: #ece2d7;
+  color: var(--kh-muted);
+  opacity: 1;
 }
 
 .report-toolbar-button.primary {
@@ -365,8 +369,16 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
+  color: var(--kh-text);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--kh-soft);
+  opacity: 1;
 }
 
 button {
@@ -375,6 +387,13 @@ button {
 
 button:disabled {
   cursor: not-allowed;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 1;
 }
 
 .operational-brand {
@@ -473,7 +492,7 @@ button:disabled {
   --management-border-strong: var(--kh-border-strong);
   --management-text: var(--kh-text);
   --management-muted: var(--kh-muted);
-  --management-soft: #6b6258;
+  --management-soft: var(--kh-soft);
   --management-accent: var(--kh-accent);
   min-height: 100vh;
   background: var(--management-bg);
@@ -505,16 +524,24 @@ button:disabled {
   box-shadow: none;
 }
 
-.management-shell :where(.bg-white, .bg-\[\#fffdfa\], .bg-\[\#fbfaf7\], .bg-\[\#fbf7f1\], .bg-\[\#f8f3ed\], .bg-\[\#303030\], .bg-\[\#343434\]) {
+.management-shell :where(.bg-white, .bg-\[\#fffdfa\], .bg-\[\#fbfaf7\], .bg-\[\#fbf7f1\], .bg-\[\#f8f3ed\], .bg-\[\#2f2f2f\], .bg-\[\#303030\], .bg-\[\#343434\]) {
   background: var(--management-card) !important;
 }
 
-.management-shell :where(.bg-\[\#292929\], .bg-\[\#202020\], .bg-\[\#f5eee6\], .bg-\[\#efe7dc\], .bg-\[\#eee4d8\], .bg-\[\#fffaf4\]) {
+.management-shell :where(.bg-\[\#292929\], .bg-\[\#202020\], .bg-\[\#242424\], .bg-\[\#262626\], .bg-\[\#2b2421\], .bg-\[\#f5eee6\], .bg-\[\#efe7dc\], .bg-\[\#eee4d8\], .bg-\[\#fffaf4\]) {
   background: var(--kh-surface-alt) !important;
 }
 
-.management-shell :where(.bg-emerald-50, .bg-amber-50, .bg-rose-50) {
-  background: rgba(255, 255, 255, 0.05) !important;
+.management-shell :where(.bg-emerald-50) {
+  background: #e8f7ef !important;
+}
+
+.management-shell :where(.bg-amber-50) {
+  background: #fff3d7 !important;
+}
+
+.management-shell :where(.bg-rose-50) {
+  background: #fff0f0 !important;
 }
 
 .management-shell :where(.border-emerald-100, .border-emerald-200, .border-amber-100, .border-amber-200, .border-rose-100, .border-rose-200) {
@@ -529,15 +556,15 @@ button:disabled {
   border-color: var(--management-border) !important;
 }
 
-.management-shell :where(.text-\[\#2f211c\], .text-\[\#4a3b34\], .text-stone-950, .text-white) {
+.management-shell :where(.text-\[\#2f211c\], .text-\[\#4a3b34\], .text-stone-950, .text-white, .text-gray-200, .text-gray-300, .text-stone-300, .text-neutral-300, .text-zinc-300) {
   color: var(--management-text) !important;
 }
 
-.management-shell :where(.text-\[\#7c6b60\], .text-\[\#8a6a56\], .text-\[\#9a8779\], .text-zinc-400) {
+.management-shell :where(.text-\[\#7c6b60\], .text-\[\#8a6a56\], .text-\[\#9a8779\], .text-zinc-400, .text-gray-400, .text-stone-400, .text-neutral-400) {
   color: var(--management-muted) !important;
 }
 
-.management-shell :where(.text-\[\#a65f3f\], .text-\[\#5d4032\]) {
+.management-shell :where(.text-\[\#a65f3f\], .text-\[\#5d4032\], .text-\[\#ff5656\], .text-\[\#ffb0b0\]) {
   color: var(--management-accent) !important;
 }
 
@@ -584,6 +611,11 @@ button:disabled {
   .text-\[\#7c6b60\],
   .text-\[\#8a6a56\],
   .text-\[\#9a8779\],
+  .text-gray-200,
+  .text-gray-300,
+  .text-stone-300,
+  .text-neutral-300,
+  .text-zinc-300,
   .text-zinc-400
 ) {
   color: #1f1713 !important;
@@ -606,6 +638,15 @@ button:disabled {
 }
 
 .management-shell :where(.bg-\[\#ff5656\] *) {
+  color: #ffffff !important;
+}
+
+.management-shell :where(.bg-\[\#5d4032\], .bg-\[\#a65f3f\], .bg-emerald-700, .bg-rose-700, .bg-zinc-600),
+.management-shell :where(button.bg-\[\#5d4032\], a.bg-\[\#5d4032\], button.bg-\[\#a65f3f\], a.bg-\[\#a65f3f\]) {
+  color: #ffffff !important;
+}
+
+.management-shell :where(.bg-\[\#5d4032\] *, .bg-\[\#a65f3f\] *, .bg-emerald-700 *, .bg-rose-700 *, .bg-zinc-600 *) {
   color: #ffffff !important;
 }
 
@@ -708,7 +749,18 @@ button:disabled {
 }
 
 .management-shell :where(input::placeholder, textarea::placeholder) {
-  color: var(--management-soft);
+  color: var(--management-soft) !important;
+  opacity: 1;
+}
+
+.management-shell :where(input:disabled, select:disabled, textarea:disabled, button:disabled) {
+  color: var(--management-muted) !important;
+  opacity: 1 !important;
+}
+
+.management-shell :where(button:disabled.bg-\[\#ff5656\], button:disabled.bg-\[\#5d4032\], button:disabled.bg-\[\#a65f3f\], button:disabled.bg-emerald-700, button:disabled.bg-rose-700) {
+  background: #c9b8a6 !important;
+  color: #3a312a !important;
 }
 
 .management-shell :where(input:focus, select:focus, textarea:focus) {
@@ -790,32 +842,32 @@ button:disabled {
 
 .captain-shell {
   --captain-accent: var(--khatoun-red);
-  --captain-bg: #f7f7f7;
-  --captain-header: rgba(255, 255, 255, 0.94);
-  --captain-card: #ffffff;
-  --captain-card-soft: #f7f7f7;
+  --captain-bg: #f4eadf;
+  --captain-header: rgba(255, 251, 246, 0.96);
+  --captain-card: #fffaf4;
+  --captain-card-soft: #f7efe5;
   --captain-card-raised: #ffffff;
-  --captain-border: rgba(0, 0, 0, 0.12);
-  --captain-border-strong: rgba(0, 0, 0, 0.18);
+  --captain-border: #dfd1c1;
+  --captain-border-strong: #cdb9a6;
   --captain-text: #111111;
-  --captain-muted: #5f5f5f;
-  --captain-soft: #8a8a8a;
+  --captain-muted: #5c5147;
+  --captain-soft: #7a7067;
   min-height: 100vh;
   background: var(--captain-bg);
   color: var(--captain-text);
 }
 
 .captain-shell[data-theme="dark"] {
-  --captain-bg: #292929;
-  --captain-header: rgba(32, 32, 32, 0.96);
-  --captain-card: #343434;
-  --captain-card-soft: #303030;
-  --captain-card-raised: #383838;
-  --captain-border: rgba(255, 255, 255, 0.08);
-  --captain-border-strong: rgba(255, 255, 255, 0.14);
-  --captain-text: #ffffff;
-  --captain-muted: #d4d4d8;
-  --captain-soft: #a1a1aa;
+  --captain-bg: #f4eadf;
+  --captain-header: rgba(255, 251, 246, 0.96);
+  --captain-card: #fffaf4;
+  --captain-card-soft: #f7efe5;
+  --captain-card-raised: #ffffff;
+  --captain-border: #dfd1c1;
+  --captain-border-strong: #cdb9a6;
+  --captain-text: #111111;
+  --captain-muted: #5c5147;
+  --captain-soft: #7a7067;
 }
 
 .captain-header {
@@ -830,7 +882,7 @@ button:disabled {
   border: 1px solid var(--captain-border);
   border-radius: 8px;
   background: var(--captain-card);
-  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 20px rgba(67, 45, 25, 0.08);
 }
 
 .captain-product-card,
@@ -841,6 +893,11 @@ button:disabled {
 .captain-product-card:hover {
   border-color: rgba(255, 86, 86, 0.35);
   transform: translateY(-1px);
+}
+
+.captain-menu-visual {
+  border: 1px solid #eadfd3;
+  background: linear-gradient(135deg, #fff7ef, #ead7c4);
 }
 
 .captain-heading {
@@ -885,12 +942,13 @@ button:disabled {
 .captain-control,
 .captain-icon-button,
 .captain-category-tab,
-.captain-table-option {
+.captain-table-option,
+.captain-filter-button {
   border: 1px solid var(--captain-border);
   border-radius: 8px;
   background: var(--captain-card-raised);
   color: var(--captain-text);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 18px rgba(67, 45, 25, 0.07);
   transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
@@ -898,13 +956,41 @@ button:disabled {
 .captain-icon-button:hover,
 .captain-secondary-button:hover,
 .captain-category-tab:hover:not([data-active="true"]),
-.captain-table-option:hover {
+.captain-table-option:hover,
+.captain-filter-button:hover:not([data-active="true"]) {
   border-color: rgba(255, 86, 86, 0.45);
   background: var(--captain-card-soft);
 }
 
-.captain-category-tab[data-active="true"] {
+.captain-category-tab[data-active="true"],
+.captain-filter-button[data-active="true"] {
+  border-color: var(--captain-accent);
+  background: var(--captain-accent);
+  color: #ffffff;
   box-shadow: 0 10px 24px rgba(255, 86, 86, 0.18);
+}
+
+.captain-table-tile {
+  border-color: #dfd1c1;
+  box-shadow: 0 8px 18px rgba(67, 45, 25, 0.07);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.captain-table-tile:hover,
+.captain-table-tile[data-selected="true"] {
+  border-color: rgba(255, 86, 86, 0.55);
+  box-shadow: 0 14px 26px rgba(67, 45, 25, 0.12);
+}
+
+.captain-table-tile[data-status="ready"] {
+  border-width: 2px;
+  border-color: #ff5656;
+  box-shadow: 0 16px 30px rgba(180, 35, 35, 0.18);
+}
+
+.captain-table-tile[data-status="needs_clearing"] {
+  border-width: 2px;
+  border-color: #8b5cf6;
 }
 
 .captain-input {
@@ -959,6 +1045,51 @@ button:disabled {
 
 .captain-stepper button:disabled {
   color: var(--captain-soft);
+}
+
+.cashier-shell {
+  --cashier-text: #181512;
+  --cashier-muted: #665c52;
+  --cashier-soft: #766d64;
+  --cashier-border: #d8c9b7;
+  color: var(--cashier-text);
+}
+
+.cashier-shell :where(h1, h2, h3, h4, h5, h6, strong, th) {
+  color: var(--cashier-text);
+}
+
+.cashier-shell :where(p, span, td, label, div) {
+  color: inherit;
+}
+
+.cashier-shell :where(input, select, textarea) {
+  border-color: var(--cashier-border) !important;
+  color: var(--cashier-text) !important;
+}
+
+.cashier-shell :where(input::placeholder, textarea::placeholder) {
+  color: var(--cashier-soft) !important;
+  opacity: 1;
+}
+
+.cashier-shell :where(.text-\[\#7a665c\], .text-\[\#8A7567\], .text-stone-500, .text-stone-600) {
+  color: var(--cashier-muted) !important;
+}
+
+.cashier-shell :where(button:disabled) {
+  border-color: var(--cashier-border) !important;
+  background: #d9cbbb !important;
+  color: #3a312a !important;
+  opacity: 1 !important;
+}
+
+.cashier-shell :where(.bg-\[\#B85F4A\], .bg-\[\#7B3F32\], .bg-\[\#5f3026\]) {
+  color: #ffffff !important;
+}
+
+.cashier-shell :where(.bg-\[\#B85F4A\] *, .bg-\[\#7B3F32\] *, .bg-\[\#5f3026\] *) {
+  color: #ffffff !important;
 }
 
 .khatoun-loader-screen {
@@ -1240,6 +1371,20 @@ button:disabled {
 
   body:has(.finance-payment-voucher) {
     background: #ffffff !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  html:has(.finance-payment-voucher) {
+    background: #ffffff !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  body:has(.finance-payment-voucher) > *:not(.finance-payment-voucher-backdrop) {
+    display: none !important;
   }
 
   body:has(.finance-payment-voucher) .finance-payment-voucher-backdrop {
@@ -1247,8 +1392,10 @@ button:disabled {
     inset: auto !important;
     display: block !important;
     overflow: visible !important;
-    width: auto !important;
+    width: 100% !important;
+    height: auto !important;
     min-height: 0 !important;
+    margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
   }
@@ -1260,6 +1407,8 @@ button:disabled {
     width: 100% !important;
     max-width: none !important;
     min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
     border: 0 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
@@ -1275,17 +1424,24 @@ button:disabled {
 
   body:has(.finance-payment-voucher) .finance-payment-voucher-paper {
     display: flex !important;
-    min-height: calc(297mm - 20mm) !important;
-    max-height: calc(297mm - 20mm) !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
     flex-direction: column !important;
     overflow: hidden !important;
     border: 1px solid #d8d8d8 !important;
     border-radius: 0 !important;
     background: #ffffff !important;
     box-shadow: none !important;
-    padding: 9mm 10mm !important;
+    margin: 0 !important;
+    padding: 7mm 9mm !important;
     break-inside: avoid;
+    break-before: avoid;
+    break-after: avoid;
     page-break-inside: avoid;
+    page-break-before: avoid;
+    page-break-after: avoid;
   }
 
   body:has(.finance-payment-voucher) .finance-payment-voucher :where(.voucher-header, .voucher-title, .voucher-meta, .voucher-amount, .voucher-section, .voucher-notes, .voucher-signatures, .voucher-footer, .voucher-field) {

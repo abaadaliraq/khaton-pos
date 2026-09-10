@@ -1,6 +1,8 @@
 export type ExpenseCategory = "electricity" | "water" | "internet" | "generator" | "maintenance" | "cleaning" | "transport" | "marketing" | "external_services" | "other";
 export type ExpensePaymentMethod = "cash" | "card" | "transfer";
-export type PurchaseRequestStatus = "pending" | "approved" | "rejected" | "received" | "cancelled";
+export type PurchaseRequestStatus = "pending" | "decision_in_progress" | "partially_approved" | "approved" | "partially_received" | "rejected" | "received" | "cancelled";
+export type PurchaseRequestItemDecisionStatus = "pending" | "approved" | "rejected";
+export type PurchaseRequestItemReceivingStatus = "pending_receipt" | "partially_received" | "received";
 export type PurchasePaymentStatus = "unpaid" | "paid";
 
 export type Expense = {
@@ -71,9 +73,32 @@ export type PurchaseRequestItem = {
   inventoryItemId: string;
   inventoryItemName: string;
   quantity: number;
+  receivedQuantity: number;
+  remainingQuantity: number;
   unitId: string;
   unitCode: string;
+  receivingStatus: PurchaseRequestItemReceivingStatus;
+  receivingHistory: PurchaseReceivingHistoryEntry[];
+  decisionStatus: PurchaseRequestItemDecisionStatus;
+  decisionByName: string | null;
+  decisionAt: string | null;
+  rejectionReason: string | null;
+  stockOnHand?: number;
+  minimumStock?: number;
+  lastPurchaseCost?: number;
+  lastSupplierName?: string | null;
   notes: string | null;
+};
+
+export type PurchaseReceivingHistoryEntry = {
+  id: string;
+  purchaseId: string;
+  purchaseNumber: number;
+  quantity: number;
+  unitCode: string;
+  receivedBy: string;
+  receivedAt: string;
+  reference: string;
 };
 
 export type PurchaseRequest = {
@@ -82,6 +107,7 @@ export type PurchaseRequest = {
   status: PurchaseRequestStatus;
   notes: string | null;
   decisionNotes: string | null;
+  rejectionReason: string | null;
   requestedBy: string;
   requestedByName: string;
   decidedBy: string | null;
@@ -165,11 +191,19 @@ export type PurchaseDecisionInput = {
   requestId: string;
   decision: "approved" | "rejected";
   decisionNotes?: string;
+  rejectionReason?: string;
+};
+
+export type PurchaseRequestItemDecisionInput = {
+  requestItemId: string;
+  decision: "approved" | "rejected";
+  rejectionReason?: string;
 };
 
 export type PayPurchaseInput = {
   purchaseId: string;
   paymentMethod: ExpensePaymentMethod;
+  cashShiftId?: string;
   referenceNumber?: string;
   notes?: string;
 };
@@ -205,6 +239,8 @@ export type FinanceSalesSummary = {
 };
 
 export type CashShiftStatus = "open" | "closed";
+export type CashMovementDirection = "in" | "out";
+export type CashMovementType = "customer_payment" | "expense" | "supplier_payment" | "manual_cash_in" | "manual_cash_out";
 
 export type CashShift = {
   id: string;
@@ -227,6 +263,21 @@ export type CashShift = {
   createdAt: string;
 };
 
+export type CashShiftMovement = {
+  id: string;
+  shiftId: string;
+  direction: CashMovementDirection;
+  movementType: CashMovementType;
+  amount: number;
+  sourceType: "payment" | "expense" | "purchase_payment" | "manual";
+  sourceId: string | null;
+  description: string | null;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+  voidedAt: string | null;
+};
+
 export type CashierOption = {
   id: string;
   name: string;
@@ -234,7 +285,7 @@ export type CashierOption = {
 };
 
 export type OpenCashShiftInput = {
-  cashierId: string;
+  cashierId?: string;
   openingCash: number;
   openingNote?: string;
 };
@@ -243,6 +294,12 @@ export type CloseCashShiftInput = {
   cashierId?: string;
   countedCash: number;
   closingNote?: string;
+};
+
+export type EmergencyCloseCashShiftInput = {
+  shiftId: string;
+  countedCash: number;
+  reason: string;
 };
 
 export type ExpectedCashBreakdown = {
@@ -293,11 +350,20 @@ export const expensePaymentMethodLabels: Record<ExpensePaymentMethod, string> = 
 };
 
 export const purchaseRequestStatusLabels: Record<PurchaseRequestStatus, string> = {
-  pending: "بانتظار الموافقة",
-  approved: "معتمد",
+  pending: "بانتظار قرار مدير النظام",
+  decision_in_progress: "بانتظار استكمال القرار",
+  partially_approved: "موافقة جزئية",
+  approved: "بانتظار الاستلام",
+  partially_received: "مستلم جزئياً",
   rejected: "مرفوض",
-  received: "تم الاستلام",
+  received: "مكتمل الاستلام",
   cancelled: "ملغي",
+};
+
+export const purchaseRequestItemDecisionStatusLabels: Record<PurchaseRequestItemDecisionStatus, string> = {
+  pending: "بانتظار القرار",
+  approved: "تمت الموافقة",
+  rejected: "مرفوض",
 };
 
 export const purchasePaymentStatusLabels: Record<PurchasePaymentStatus, string> = {

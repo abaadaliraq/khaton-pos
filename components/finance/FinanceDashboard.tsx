@@ -1,23 +1,26 @@
 "use client";
 
-import { AlertTriangle, Banknote, CalendarClock, CheckCircle2, Clock3, Eye, Landmark, ReceiptText, Save, TrendingDown, TrendingUp, WalletCards, XCircle } from "lucide-react";
+import { AlertTriangle, Banknote, CheckCircle2, Clock3, Eye, Landmark, ReceiptText, Save, TrendingDown, TrendingUp, WalletCards, XCircle } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExpenseVoucherDialog, expenseVoucherNumber } from "@/components/finance/ExpenseVoucherDialog";
+import { OperationalToast } from "@/components/operational/OperationalToast";
+import { useOperationalNotifications } from "@/components/operational/useOperationalNotifications";
 import { PurchasePaymentVoucherDialog, purchasePaymentVoucherNumber } from "@/components/finance/PurchasePaymentVoucherDialog";
 import { ManagementTabs } from "@/components/ui/ManagementTabs";
 import { formatCurrency } from "@/lib/formatCurrency";
+import { purchaseRequestCode, purchaseRequestItemsSummary, singlePurchaseRequestItemName, singlePurchaseRequestQuantity } from "@/lib/purchaseRequestDisplay";
 import { createClient } from "@/lib/supabase/client";
 import { logSupabaseError } from "@/lib/supabaseError";
-import { closeCashShift, createExpense, getCashierOptions, getExpectedCashForShift, getExpenses, getFinanceSalesSummary, getOpenCashShift, getRecentCashShifts, openCashShift } from "@/services/financeService";
-import { decidePurchaseRequest, getPurchasePayments, getPurchaseRequests, getPurchases, payPurchase } from "@/services/purchaseService";
-import type { CashierOption, CashShift, CloseCashShiftInput, CreateExpenseInput, CustomerPayment, ExpectedCashBreakdown, Expense, ExpenseCategory, ExpensePaymentMethod, FinanceSalesSummary, OpenCashShiftInput, PayPurchaseInput, Purchase, PurchasePayment, PurchaseRequest } from "@/types/finance";
-import { expenseCategoryLabels, expensePaymentMethodLabels, purchasePaymentStatusLabels, purchaseRequestStatusLabels } from "@/types/finance";
+import { createExpense, getCashierOptions, getCashShiftMovements, getExpectedCashForShift, getExpenses, getFinanceSalesSummary, getOpenCashShifts, getRecentCashShifts } from "@/services/financeService";
+import { decidePurchaseRequestItem, getPurchasePayments, getPurchaseRequests, getPurchases, payPurchase } from "@/services/purchaseService";
+import type { CashierOption, CashShift, CashShiftMovement, CreateExpenseInput, CustomerPayment, ExpectedCashBreakdown, Expense, ExpenseCategory, ExpensePaymentMethod, FinanceSalesSummary, PayPurchaseInput, Purchase, PurchasePayment, PurchaseRequest } from "@/types/finance";
+import { expenseCategoryLabels, expensePaymentMethodLabels, purchasePaymentStatusLabels, purchaseRequestItemDecisionStatusLabels, purchaseRequestStatusLabels } from "@/types/finance";
 
 type FinanceTab = "overview" | "requests" | "invoices" | "expenses" | "payments";
 
 const baghdadTimeZone = "Asia/Baghdad";
 const emptyExpense: CreateExpenseInput = { amount: 0, category: "electricity", paymentMethod: "cash", receiptNumber: "", description: "", notes: "" };
-const emptyPayment = { paymentMethod: "cash" as ExpensePaymentMethod, referenceNumber: "", notes: "" };
+const emptyPayment = { paymentMethod: "cash" as ExpensePaymentMethod, cashShiftId: "", referenceNumber: "", notes: "" };
 const tabs: { id: FinanceTab; label: string }[] = [
   { id: "overview", label: "نظرة عامة" },
   { id: "requests", label: "طلبات الشراء" },
@@ -25,6 +28,14 @@ const tabs: { id: FinanceTab; label: string }[] = [
   { id: "expenses", label: "المصروفات" },
   { id: "payments", label: "المدفوعات" },
 ];
+
+const cashMovementTypeLabels: Record<CashShiftMovement["movementType"], string> = {
+  customer_payment: "دفعة زبون",
+  expense: "مصروف نقدي",
+  supplier_payment: "دفعة مورد نقدية",
+  manual_cash_in: "إدخال نقدي يدوي",
+  manual_cash_out: "إخراج نقدي يدوي",
+};
 
 function formatDateTime(value: string | null) {
   if (!value) return "-";
@@ -43,6 +54,31 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(Number.isFinite(value) ? value : 0);
 }
 
+function requestItemSummary(request: PurchaseRequest) {
+  return singlePurchaseRequestItemName(request);
+}
+
+function requestEstimatedValue(request: PurchaseRequest) {
+  return request.items.reduce((total, item) => total + item.quantity * (item.lastPurchaseCost ?? 0), 0);
+}
+
+function requestStatusTone(status: PurchaseRequest["status"]) {
+  if (status === "pending") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (status === "approved") return "border-sky-200 bg-sky-50 text-sky-800";
+  if (status === "partially_received") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (status === "received") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "rejected" || status === "cancelled") return "border-rose-200 bg-rose-50 text-rose-800";
+  return "border-[#e4d8c8] bg-[#fbfaf7] text-[#4a3b34]";
+}
+
+function requestDecisionError(error: unknown) {
+  const text = JSON.stringify(error).toLowerCase();
+  if (text.includes("only admin")) return "قرار طلب الشراء متاح لمدير النظام فقط.";
+  if (text.includes("rejection reason")) return "سبب الرفض مطلوب.";
+  if (text.includes("only pending")) return "يمكن اتخاذ القرار على الطلبات التي تنتظر قرار المدير فقط.";
+  return "تعذر حفظ قرار طلب الشراء.";
+}
+
 function formatTime(value: string | null) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("ar-IQ", { hour: "numeric", minute: "2-digit", timeZone: baghdadTimeZone }).format(new Date(value));
@@ -53,22 +89,6 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat("ar-IQ", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: baghdadTimeZone }).format(new Date(value));
 }
 
-function parseCashInput(value: string) {
-  if (!/^\d+(\.\d+)?$/.test(value.trim())) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-}
-
-function shiftActionError(error: unknown, action: "open" | "close") {
-  const text = JSON.stringify(error).toLowerCase();
-  if (text.includes("already has an open cash shift")) return "لديك وردية مفتوحة بالفعل.";
-  if (text.includes("no open cash shift")) return "لا توجد وردية مفتوحة لإغلاقها.";
-  if (text.includes("only cashier") || text.includes("permission") || text.includes("not authorized")) {
-    return action === "open" ? "لا تملك صلاحية فتح الوردية." : "لا تملك صلاحية إغلاق الوردية.";
-  }
-  return action === "open" ? "تعذر فتح الوردية. حاول مرة أخرى." : "تعذر إغلاق الوردية. حاول مرة أخرى.";
-}
-
 function cashOperationError(error: unknown, fallback: string) {
   const text = JSON.stringify(error).toLowerCase();
   if (text.includes("stale_cash_shift_must_close")) {
@@ -77,19 +97,22 @@ function cashOperationError(error: unknown, fallback: string) {
   if (text.includes("cash_shift_required")) {
     return "يجب فتح وردية صندوق قبل تسجيل حركة نقدية.";
   }
+  if (text.includes("multiple_open_cash_shifts")) {
+    return "توجد أكثر من وردية مفتوحة. اختر الصندوق الذي ستخرج منه الدفعة.";
+  }
   return fallback;
 }
 
 function DifferenceLabel({ value }: { value: number }) {
   if (value === 0) {
-    return <span className="rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-sm font-semibold text-emerald-200">الصندوق مطابق</span>;
+    return <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-sm font-semibold text-emerald-800">الصندوق مطابق</span>;
   }
 
   if (value > 0) {
-    return <span className="rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-sm font-semibold text-amber-200">زيادة في الصندوق + {formatCurrency(value)}</span>;
+    return <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-sm font-semibold text-amber-800">زيادة في الصندوق + {formatCurrency(value)}</span>;
   }
 
-  return <span className="rounded-md border border-[#ff5656]/25 bg-[#ff5656]/10 px-2 py-1 text-sm font-semibold text-[#ffb0b0]">نقص في الصندوق - {formatCurrency(Math.abs(value))}</span>;
+  return <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-sm font-semibold text-rose-800">نقص في الصندوق - {formatCurrency(Math.abs(value))}</span>;
 }
 
 function Card({ title, value }: { title: string; value: string }) {
@@ -290,156 +313,151 @@ function FinancialMovements({ movements }: { movements: FinanceMovement[] }) {
 
 function FinanceAlerts({ alerts }: { alerts: FinanceAlert[] }) {
   return (
-    <section className="rounded-md border border-white/10 bg-[#303030] p-4 shadow-sm">
-      <div className="flex items-center gap-2">
-        <AlertTriangle className="text-[#ff5656]" size={20} />
-        <h2 className="text-lg font-semibold text-white">تنبيهات تحتاج متابعة</h2>
-      </div>
-      <div className="mt-4 space-y-3">
-        {alerts.length === 0 ? <p className="rounded-md bg-white/[0.04] p-3 text-sm text-zinc-400">لا توجد إجراءات مالية معلقة حالياً</p> : null}
-        {alerts.map((alert) => (
-          <article key={alert.id} className="rounded-md border border-white/10 bg-white/[0.04] p-3">
-            <p className="font-semibold text-white">{alert.title}</p>
-            <p className="mt-1 text-sm text-zinc-400">{alert.description}</p>
-            {typeof alert.amount === "number" ? <p className="mt-2 text-sm font-semibold text-[#ffb0b0]">{formatCurrency(alert.amount)}</p> : null}
-          </article>
-        ))}
-      </div>
+    <section className="flex flex-wrap items-center gap-2 rounded-md border border-[#eadfd3] bg-[#fffaf4] px-3 py-2 text-sm text-[#2f211c] shadow-sm">
+      <span className="inline-flex items-center gap-2 font-black text-[#181818]">
+        <AlertTriangle className="text-[#a65f3f]" size={16} />
+        تنبيهات تحتاج متابعة:
+      </span>
+      {alerts.length === 0 ? <span className="text-[#7c6b60]">لا توجد تنبيهات حالياً</span> : null}
+      {alerts.map((alert) => (
+        <span key={alert.id} className="inline-flex max-w-full items-center gap-2 rounded-md border border-[#e4d8c8] bg-white px-2.5 py-1 text-xs font-semibold text-[#4a3b34]">
+          <span className="truncate">{alert.title}</span>
+          {typeof alert.amount === "number" ? <span className="font-black text-[#a65f3f]">{formatCurrency(alert.amount)}</span> : null}
+        </span>
+      ))}
     </section>
-  );
-}
-
-function ExpectedCashBreakdownView({ expected }: { expected: ExpectedCashBreakdown }) {
-  return (
-    <div className="grid gap-2">
-      <div className="flex items-center justify-between rounded-md bg-white/[0.04] px-3 py-2">
-        <span className="text-sm text-zinc-300">الرصيد الافتتاحي</span>
-        <span className="font-semibold text-white">{formatCurrency(expected.openingCash)}</span>
-      </div>
-      <div className="flex items-center justify-between rounded-md bg-white/[0.04] px-3 py-2">
-        <span className="text-sm text-zinc-300">المبيعات النقدية</span>
-        <span className="font-semibold text-emerald-300">+ {formatCurrency(expected.cashSales)}</span>
-      </div>
-      <div className="flex items-center justify-between rounded-md bg-white/[0.04] px-3 py-2">
-        <span className="text-sm text-zinc-300">المصروفات النقدية</span>
-        <span className="font-semibold text-[#ffb0b0]">- {formatCurrency(expected.cashExpenses)}</span>
-      </div>
-      <div className="flex items-center justify-between rounded-md bg-white/[0.04] px-3 py-2">
-        <span className="text-sm text-zinc-300">دفعات الموردين النقدية</span>
-        <span className="font-semibold text-[#ffb0b0]">- {formatCurrency(expected.cashSupplierPayments)}</span>
-      </div>
-      <div className="mt-1 flex items-center justify-between border-t border-white/10 px-3 pt-3">
-        <span className="text-sm font-semibold text-white">النقد المتوقع</span>
-        <span className="text-xl font-semibold text-white">{formatCurrency(expected.expectedCash)}</span>
-      </div>
-    </div>
   );
 }
 
 function CashShiftCard({
   openShift,
   expectedCash,
+  shiftMovements,
   recentShifts,
   cashierOptions,
-  onOpen,
-  onClose,
   isSaving,
 }: {
   openShift: CashShift | null;
   expectedCash: ExpectedCashBreakdown | null;
+  shiftMovements: CashShiftMovement[];
   recentShifts: CashShift[];
   cashierOptions: CashierOption[];
-  onOpen: () => void;
-  onClose: () => void;
   isSaving: boolean;
 }) {
   const lastClosedShift = recentShifts.find((shift) => shift.status === "closed") ?? null;
   const isStaleOpenShift = openShift ? openShift.businessDate < todayKey() : false;
-  const cashOut = (expectedCash?.cashExpenses ?? 0) + (expectedCash?.cashSupplierPayments ?? 0);
   const openShiftCashier = openShift ? cashierOptions.find((cashier) => cashier.id === openShift.cashierId) : null;
 
   return (
-    <section className="rounded-md border border-white/10 bg-[#303030] p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="overflow-hidden rounded-md border border-[#d8c8b7] bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#eadfd3] bg-[#f6efe7] px-4 py-3">
         <div>
-          <p className="text-sm text-zinc-400">الوردية الحالية</p>
-          <h2 className="mt-1 text-xl font-semibold text-white">{openShift ? "حالة: مفتوحة" : "لا توجد وردية مفتوحة"}</h2>
-          <p className="mt-2 text-sm leading-6 text-zinc-400">
-            {openShift ? `متابعة النقد المتوقع لوردية ${openShiftCashier?.name ?? "الكاشير المحدد"}.` : "افتح وردية لكاشير محدد لبدء متابعة الصندوق النقدي."}
-          </p>
+          <p className="text-xs font-bold text-[#a65f3f]">وردية الصندوق</p>
+          <h2 className="text-lg font-black text-[#181818]">الوردية الحالية</h2>
         </div>
-        <span className="grid h-10 w-10 place-items-center rounded-md bg-white/[0.06] text-[#ff5656]">
-          <CalendarClock size={21} />
-        </span>
+        <span className="rounded-md border border-[#d8c8b7] bg-white px-3 py-2 text-xs font-bold text-[#4a3b34]">رقابي فقط</span>
       </div>
 
       {openShift ? (
-        <div className="mt-5 space-y-4">
+        <div>
           {isStaleOpenShift ? (
-            <div className="rounded-md border border-[#ff5656]/30 bg-[#ff5656]/10 p-4">
+            <div className="border-b border-rose-200 bg-rose-50 p-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="font-semibold text-white">يوجد صندوق مفتوح من يوم سابق</p>
-                  <p className="mt-2 text-sm leading-6 text-zinc-300">
+                  <p className="font-bold text-rose-800">يوجد صندوق مفتوح من يوم سابق</p>
+                  <p className="mt-1 text-sm leading-6 text-rose-700">
                     هذه الوردية بدأت بتاريخ {formatDate(`${openShift.businessDate}T00:00:00+03:00`)} ولم يتم إغلاقها. يجب مراجعة النقد الموجود فعلياً وإغلاق الصندوق قبل بدء العمليات النقدية لليوم الجديد.
                   </p>
                 </div>
-                <button type="button" disabled={isSaving || !expectedCash} onClick={onClose} className="inline-flex h-10 items-center gap-2 rounded-md bg-[#ff5656] px-4 text-sm font-semibold text-white disabled:opacity-50">
+                <button type="button" disabled className="inline-flex h-9 items-center gap-2 rounded-md bg-[#c9b8a6] px-3 text-xs font-bold text-[#3a312a]">
                   <Clock3 size={16} />
-                  مراجعة وإغلاق الصندوق
+                  الإغلاق من الكاشير أو الإدارة
                 </button>
-              </div>
-              <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-3">
-                <p className="text-zinc-400">تاريخ الفتح: <span className="text-zinc-100">{formatDate(`${openShift.businessDate}T00:00:00+03:00`)}</span></p>
-                <p className="text-zinc-400">وقت الفتح: <span className="text-zinc-100">{formatTime(openShift.openedAt)}</span></p>
-                <p className="text-zinc-400">الرصيد الافتتاحي: <span className="text-zinc-100">{formatCurrency(openShift.openingCash)}</span></p>
-                <p className="text-zinc-400">إجمالي Cash In: <span className="text-emerald-200">{formatCurrency(expectedCash?.cashSales ?? 0)}</span></p>
-                <p className="text-zinc-400">إجمالي Cash Out: <span className="text-[#ffb0b0]">{formatCurrency(cashOut)}</span></p>
-                <p className="text-zinc-400">النقد المتوقع الحالي: <span className="text-zinc-100">{formatCurrency(expectedCash?.expectedCash ?? openShift.openingCash)}</span></p>
               </div>
             </div>
           ) : null}
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-md bg-white/[0.04] p-3">
-              <p className="text-xs text-zinc-500">الكاشير</p>
-              <p className="mt-1 font-semibold text-white">{openShiftCashier?.name ?? openShift.cashierId}</p>
-            </div>
-            <div className="rounded-md bg-white/[0.04] p-3">
-              <p className="text-xs text-zinc-500">بدأت</p>
-              <p className="mt-1 font-semibold text-white">{formatTime(openShift.openedAt)}</p>
-            </div>
-            <div className="rounded-md bg-white/[0.04] p-3">
-              <p className="text-xs text-zinc-500">تاريخ العمل</p>
-              <p className="mt-1 font-semibold text-white">{formatDate(`${openShift.businessDate}T00:00:00+03:00`)}</p>
-            </div>
-            <div className="rounded-md bg-white/[0.04] p-3">
-              <p className="text-xs text-zinc-500">الرصيد الافتتاحي</p>
-              <p className="mt-1 font-semibold text-white">{formatCurrency(openShift.openingCash)}</p>
-            </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1180px] border-collapse text-right text-xs">
+              <thead className="bg-[#2b2421] text-white">
+                <tr>
+                  <th className="border border-[#463d38] px-3 py-2">الحالة</th>
+                  <th className="border border-[#463d38] px-3 py-2">الكاشير</th>
+                  <th className="border border-[#463d38] px-3 py-2">تاريخ العمل</th>
+                  <th className="border border-[#463d38] px-3 py-2">وقت الفتح</th>
+                  <th className="border border-[#463d38] px-3 py-2">الرصيد الافتتاحي</th>
+                  <th className="border border-[#463d38] px-3 py-2">مبيعات نقدية</th>
+                  <th className="border border-[#463d38] px-3 py-2">مصروفات نقدية</th>
+                  <th className="border border-[#463d38] px-3 py-2">دفعات موردين نقدية</th>
+                  <th className="border border-[#463d38] px-3 py-2">النقد المتوقع</th>
+                  <th className="border border-[#463d38] px-3 py-2">ملاحظة</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="bg-white align-middle text-[#181818]">
+                  <td className="border border-[#eadfd3] px-3 py-2 font-bold">{isStaleOpenShift ? "قديمة" : "مفتوحة"}</td>
+                  <td className="border border-[#eadfd3] px-3 py-2 font-semibold">{openShiftCashier?.name ?? openShift.cashierName ?? openShift.cashierId}</td>
+                  <td className="border border-[#eadfd3] px-3 py-2">{formatDate(`${openShift.businessDate}T00:00:00+03:00`)}</td>
+                  <td className="border border-[#eadfd3] px-3 py-2">{formatTime(openShift.openedAt)}</td>
+                  <td className="border border-[#eadfd3] px-3 py-2 font-semibold">{formatCurrency(openShift.openingCash)}</td>
+                  <td className="border border-[#eadfd3] px-3 py-2 font-semibold text-emerald-700">{formatCurrency(expectedCash?.cashSales ?? 0)}</td>
+                  <td className="border border-[#eadfd3] px-3 py-2 font-semibold text-rose-700">{formatCurrency(expectedCash?.cashExpenses ?? 0)}</td>
+                  <td className="border border-[#eadfd3] px-3 py-2 font-semibold text-rose-700">{formatCurrency(expectedCash?.cashSupplierPayments ?? 0)}</td>
+                  <td className="border border-[#eadfd3] px-3 py-2 text-sm font-black">{formatCurrency(expectedCash?.expectedCash ?? openShift.openingCash)}</td>
+                  <td className="border border-[#eadfd3] px-3 py-2">
+                    <span className="font-semibold text-[#7c6b60]">{isSaving ? "جارٍ التحديث" : "لا يملك المحاسب فتح أو إغلاق الورديات"}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          {expectedCash ? <ExpectedCashBreakdownView expected={expectedCash} /> : <p className="rounded-md bg-white/[0.04] p-3 text-sm text-zinc-400">تعذر تحميل النقد المتوقع حالياً.</p>}
-          <div className="flex justify-end">
-            <button type="button" disabled={isSaving} onClick={onClose} className="inline-flex h-10 items-center gap-2 rounded-md bg-[#ff5656] px-4 text-sm font-semibold text-white shadow-lg shadow-[#ff5656]/15 disabled:opacity-50">
-              <Clock3 size={16} />
-              إغلاق الوردية
-            </button>
+
+          <div className="border-t border-[#eadfd3]">
+            <div className="bg-[#fbfaf7] px-4 py-2 text-sm font-bold text-[#181818]">حركات الوردية</div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] border-collapse text-right text-xs">
+                <thead className="bg-[#f0e7dc] text-[#2f211c]">
+                  <tr>
+                    <th className="border border-[#eadfd3] px-3 py-2">الوقت</th>
+                    <th className="border border-[#eadfd3] px-3 py-2">نوع الحركة</th>
+                    <th className="border border-[#eadfd3] px-3 py-2">المرجع</th>
+                    <th className="border border-[#eadfd3] px-3 py-2">الداخل</th>
+                    <th className="border border-[#eadfd3] px-3 py-2">الخارج</th>
+                    <th className="border border-[#eadfd3] px-3 py-2">المستخدم</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shiftMovements.map((movement) => (
+                    <tr key={movement.id} className="odd:bg-white even:bg-[#fffdfa]">
+                      <td className="border border-[#eadfd3] px-3 py-2">{formatTime(movement.createdAt)}</td>
+                      <td className="border border-[#eadfd3] px-3 py-2 font-semibold">{cashMovementTypeLabels[movement.movementType]}</td>
+                      <td className="border border-[#eadfd3] px-3 py-2" dir="ltr">{movement.sourceId ? movement.sourceId.slice(0, 8) : "-"}</td>
+                      <td className="border border-[#eadfd3] px-3 py-2 font-bold text-emerald-700">{movement.direction === "in" ? formatCurrency(movement.amount) : "-"}</td>
+                      <td className="border border-[#eadfd3] px-3 py-2 font-bold text-rose-700">{movement.direction === "out" ? formatCurrency(movement.amount) : "-"}</td>
+                      <td className="border border-[#eadfd3] px-3 py-2">{movement.createdByName ?? movement.createdBy}</td>
+                    </tr>
+                  ))}
+                  {shiftMovements.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="border border-[#eadfd3] px-3 py-5 text-center text-[#7c6b60]">لا توجد حركات مسجلة لهذه الوردية بعد.</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       ) : (
-        <div className="mt-5 space-y-4">
-          <button type="button" disabled={isSaving} onClick={onOpen} className="inline-flex h-10 items-center gap-2 rounded-md bg-[#ff5656] px-4 text-sm font-semibold text-white shadow-lg shadow-[#ff5656]/15 disabled:opacity-50">
-            <Banknote size={16} />
-            فتح وردية
-          </button>
+        <div className="space-y-3 p-4">
+          <p className="text-sm font-semibold text-[#4a3b34]">لا توجد وردية مفتوحة للمستخدم الحالي.</p>
           {lastClosedShift ? (
-            <div className="rounded-md border border-white/10 bg-white/[0.04] p-4">
-              <p className="text-sm font-semibold text-white">آخر وردية</p>
+            <div className="border border-[#eadfd3] bg-[#fbfaf7] p-3">
+              <p className="text-sm font-bold text-[#181818]">آخر وردية</p>
               <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-3">
-                <p className="text-zinc-400">بدأت: <span className="text-zinc-200">{formatTime(lastClosedShift.openedAt)}</span></p>
-                <p className="text-zinc-400">أغلقت: <span className="text-zinc-200">{formatTime(lastClosedShift.closedAt)}</span></p>
-                <p className="text-zinc-400">الرصيد الافتتاحي: <span className="text-zinc-200">{formatCurrency(lastClosedShift.openingCash)}</span></p>
-                <p className="text-zinc-400">النقد المتوقع: <span className="text-zinc-200">{formatCurrency(lastClosedShift.expectedCashSnapshot ?? 0)}</span></p>
-                <p className="text-zinc-400">النقد المعدود: <span className="text-zinc-200">{formatCurrency(lastClosedShift.countedCash ?? 0)}</span></p>
+                <p className="text-[#7c6b60]">بدأت: <span className="text-[#181818]">{formatTime(lastClosedShift.openedAt)}</span></p>
+                <p className="text-[#7c6b60]">أغلقت: <span className="text-[#181818]">{formatTime(lastClosedShift.closedAt)}</span></p>
+                <p className="text-[#7c6b60]">الرصيد الافتتاحي: <span className="text-[#181818]">{formatCurrency(lastClosedShift.openingCash)}</span></p>
+                <p className="text-[#7c6b60]">النقد المتوقع: <span className="text-[#181818]">{formatCurrency(lastClosedShift.expectedCashSnapshot ?? 0)}</span></p>
+                <p className="text-[#7c6b60]">النقد المعدود: <span className="text-[#181818]">{formatCurrency(lastClosedShift.countedCash ?? 0)}</span></p>
                 <div><DifferenceLabel value={lastClosedShift.cashDifference ?? 0} /></div>
               </div>
             </div>
@@ -452,50 +470,50 @@ function CashShiftCard({
 
 function RecentCashShifts({ shifts }: { shifts: CashShift[] }) {
   return (
-    <section className="overflow-hidden rounded-md border border-white/10 bg-[#303030] shadow-sm">
-      <div className="border-b border-white/10 p-4">
-        <h2 className="text-lg font-semibold text-white">آخر الورديات</h2>
+    <section className="overflow-hidden rounded-md border border-[#d8c8b7] bg-white shadow-sm">
+      <div className="border-b border-[#eadfd3] bg-[#f6efe7] px-4 py-3">
+        <h2 className="text-lg font-black text-[#181818]">آخر الورديات</h2>
       </div>
-      {shifts.length === 0 ? <p className="p-4 text-sm text-zinc-400">لا توجد ورديات مسجلة بعد.</p> : null}
+      {shifts.length === 0 ? <p className="p-4 text-sm text-[#7c6b60]">لا توجد ورديات مسجلة بعد.</p> : null}
       <div className="hidden overflow-x-auto md:block">
-        <table className="min-w-full text-sm">
-          <thead className="bg-white/[0.04] text-xs text-zinc-400">
+        <table className="w-full min-w-[980px] border-collapse text-right text-xs">
+          <thead className="bg-[#2b2421] text-white">
             <tr>
-              <th className="px-4 py-3 text-right font-medium">تاريخ العمل</th>
-              <th className="px-4 py-3 text-right font-medium">وقت الفتح</th>
-              <th className="px-4 py-3 text-right font-medium">وقت الإغلاق</th>
-              <th className="px-4 py-3 text-right font-medium">الرصيد الافتتاحي</th>
-              <th className="px-4 py-3 text-right font-medium">المتوقع</th>
-              <th className="px-4 py-3 text-right font-medium">المعدود</th>
-              <th className="px-4 py-3 text-right font-medium">الفرق</th>
-              <th className="px-4 py-3 text-right font-medium">الحالة</th>
+              <th className="border border-[#463d38] px-3 py-2">تاريخ العمل</th>
+              <th className="border border-[#463d38] px-3 py-2">وقت الفتح</th>
+              <th className="border border-[#463d38] px-3 py-2">وقت الإغلاق</th>
+              <th className="border border-[#463d38] px-3 py-2">الرصيد الافتتاحي</th>
+              <th className="border border-[#463d38] px-3 py-2">المتوقع</th>
+              <th className="border border-[#463d38] px-3 py-2">المعدود</th>
+              <th className="border border-[#463d38] px-3 py-2">الفرق</th>
+              <th className="border border-[#463d38] px-3 py-2">الحالة</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/10">
+          <tbody>
             {shifts.map((shift) => (
-              <tr key={shift.id}>
-                <td className="px-4 py-3 text-zinc-300">{formatDate(`${shift.businessDate}T00:00:00+03:00`)}</td>
-                <td className="px-4 py-3 text-zinc-300">{formatTime(shift.openedAt)}</td>
-                <td className="px-4 py-3 text-zinc-300">{formatTime(shift.closedAt)}</td>
-                <td className="px-4 py-3 text-zinc-200">{formatCurrency(shift.openingCash)}</td>
-                <td className="px-4 py-3 text-zinc-200">{shift.expectedCashSnapshot === null ? "-" : formatCurrency(shift.expectedCashSnapshot)}</td>
-                <td className="px-4 py-3 text-zinc-200">{shift.countedCash === null ? "-" : formatCurrency(shift.countedCash)}</td>
-                <td className="px-4 py-3">{shift.cashDifference === null ? <span className="text-zinc-500">-</span> : <DifferenceLabel value={shift.cashDifference} />}</td>
-                <td className="px-4 py-3 text-zinc-300">{shift.status === "open" ? "مفتوحة" : "مغلقة"}</td>
+              <tr key={shift.id} className="odd:bg-white even:bg-[#fffdfa] hover:bg-[#fff4eb]">
+                <td className="border border-[#eadfd3] px-3 py-2 text-[#4a3b34]">{formatDate(`${shift.businessDate}T00:00:00+03:00`)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2 text-[#4a3b34]">{formatTime(shift.openedAt)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2 text-[#4a3b34]">{formatTime(shift.closedAt)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2 font-semibold text-[#181818]">{formatCurrency(shift.openingCash)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2 font-semibold text-[#181818]">{shift.expectedCashSnapshot === null ? "-" : formatCurrency(shift.expectedCashSnapshot)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2 font-semibold text-[#181818]">{shift.countedCash === null ? "-" : formatCurrency(shift.countedCash)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2">{shift.cashDifference === null ? <span className="text-[#7c6b60]">-</span> : <DifferenceLabel value={shift.cashDifference} />}</td>
+                <td className="border border-[#eadfd3] px-3 py-2 font-semibold text-[#4a3b34]">{shift.status === "open" ? "مفتوحة" : "مغلقة"}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div className="divide-y divide-white/10 md:hidden">
+      <div className="divide-y divide-[#eadfd3] md:hidden">
         {shifts.map((shift) => (
           <article key={shift.id} className="space-y-2 p-4 text-sm">
             <div className="flex items-center justify-between gap-3">
-              <p className="font-semibold text-white">{formatDate(`${shift.businessDate}T00:00:00+03:00`)}</p>
-              <span className="text-zinc-400">{shift.status === "open" ? "مفتوحة" : "مغلقة"}</span>
+              <p className="font-semibold text-[#181818]">{formatDate(`${shift.businessDate}T00:00:00+03:00`)}</p>
+              <span className="text-[#7c6b60]">{shift.status === "open" ? "مفتوحة" : "مغلقة"}</span>
             </div>
-            <p className="text-zinc-400">الفتح: {formatTime(shift.openedAt)} · الإغلاق: {formatTime(shift.closedAt)}</p>
-            <p className="text-zinc-300">افتتاحي {formatCurrency(shift.openingCash)} · متوقع {shift.expectedCashSnapshot === null ? "-" : formatCurrency(shift.expectedCashSnapshot)}</p>
+            <p className="text-[#7c6b60]">الفتح: {formatTime(shift.openedAt)} · الإغلاق: {formatTime(shift.closedAt)}</p>
+            <p className="text-[#4a3b34]">افتتاحي {formatCurrency(shift.openingCash)} · متوقع {shift.expectedCashSnapshot === null ? "-" : formatCurrency(shift.expectedCashSnapshot)}</p>
             {shift.cashDifference === null ? null : <DifferenceLabel value={shift.cashDifference} />}
           </article>
         ))}
@@ -504,154 +522,11 @@ function RecentCashShifts({ shifts }: { shifts: CashShift[] }) {
   );
 }
 
-function OpenShiftModal({
-  form,
-  cashierOptions,
-  onChange,
-  onCancel,
-  onSubmit,
-  isSaving,
-}: {
-  form: { cashierId: string; openingCash: string; openingNote: string };
-  cashierOptions: CashierOption[];
-  onChange: (form: { cashierId: string; openingCash: string; openingNote: string }) => void;
-  onCancel: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  isSaving: boolean;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
-      <form onSubmit={onSubmit} className="w-full max-w-md rounded-md border border-white/10 bg-[#303030] p-5 shadow-2xl">
-        <h2 className="text-lg font-semibold text-white">فتح وردية جديدة</h2>
-        <div className="mt-4 grid gap-3">
-          <label className="grid gap-1 text-sm font-medium text-zinc-200">
-            الكاشير
-            <select
-              required
-              value={form.cashierId}
-              onChange={(event) => onChange({ ...form, cashierId: event.target.value })}
-              className="h-11 rounded-md border border-white/10 bg-[#252525] px-3 text-sm text-white outline-none focus:border-[#ff5656]"
-            >
-              <option value="">اختر الكاشير</option>
-              {cashierOptions.map((cashier) => (
-                <option key={cashier.id} value={cashier.id}>{cashier.name} - {cashier.username}</option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-sm font-medium text-zinc-200">
-            الرصيد الافتتاحي
-            <div className="relative">
-              <input
-                required
-                min="0"
-                step="1"
-                inputMode="decimal"
-                type="number"
-                value={form.openingCash}
-                onChange={(event) => onChange({ ...form, openingCash: event.target.value })}
-                placeholder="0 د.ع"
-                className="h-11 w-full rounded-md border border-white/10 bg-[#252525] px-3 pl-12 text-sm text-white outline-none focus:border-[#ff5656]"
-              />
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">د.ع</span>
-            </div>
-          </label>
-          <label className="grid gap-1 text-sm font-medium text-zinc-200">
-            ملاحظة اختيارية
-            <textarea
-              value={form.openingNote}
-              onChange={(event) => onChange({ ...form, openingNote: event.target.value })}
-              placeholder="المبلغ الموجود في الصندوق عند بداية الوردية"
-              className="min-h-24 rounded-md border border-white/10 bg-[#252525] p-3 text-sm text-white outline-none focus:border-[#ff5656]"
-            />
-          </label>
-        </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <button type="button" onClick={onCancel} className="h-10 rounded-md border border-white/10 px-4 text-sm text-zinc-200 hover:bg-white/[0.04]">إلغاء</button>
-          <button disabled={isSaving} type="submit" className="inline-flex h-10 items-center gap-2 rounded-md bg-[#ff5656] px-4 text-sm font-semibold text-white disabled:opacity-50">
-            <Save size={16} />
-            فتح الوردية
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function CloseShiftModal({
-  expectedCash,
-  form,
-  onChange,
-  onCancel,
-  onSubmit,
-  isSaving,
-}: {
-  expectedCash: ExpectedCashBreakdown | null;
-  form: { countedCash: string; closingNote: string };
-  onChange: (form: { countedCash: string; closingNote: string }) => void;
-  onCancel: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  isSaving: boolean;
-}) {
-  const countedCash = parseCashInput(form.countedCash);
-  const difference = expectedCash && countedCash !== null ? countedCash - expectedCash.expectedCash : null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/55 p-4">
-      <form onSubmit={onSubmit} className="w-full max-w-lg rounded-md border border-white/10 bg-[#303030] p-5 shadow-2xl">
-        <h2 className="text-lg font-semibold text-white">إغلاق الوردية</h2>
-        <div className="mt-4">
-          {expectedCash ? <ExpectedCashBreakdownView expected={expectedCash} /> : <p className="rounded-md bg-white/[0.04] p-3 text-sm text-zinc-400">تعذر تحميل النقد المتوقع.</p>}
-        </div>
-        <div className="mt-4 grid gap-3">
-          <label className="grid gap-1 text-sm font-medium text-zinc-200">
-            أدخل النقد الموجود فعلياً في الصندوق
-            <div className="relative">
-              <input
-                required
-                min="0"
-                step="1"
-                inputMode="decimal"
-                type="number"
-                value={form.countedCash}
-                onChange={(event) => onChange({ ...form, countedCash: event.target.value })}
-                placeholder="240000"
-                className="h-11 w-full rounded-md border border-white/10 bg-[#252525] px-3 pl-12 text-sm text-white outline-none focus:border-[#ff5656]"
-              />
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">د.ع</span>
-            </div>
-          </label>
-          {difference !== null ? (
-            <div className="flex items-center justify-between rounded-md border border-white/10 bg-white/[0.04] px-3 py-3">
-              <span className="text-sm font-semibold text-white">الفرق</span>
-              <DifferenceLabel value={difference} />
-            </div>
-          ) : null}
-          <label className="grid gap-1 text-sm font-medium text-zinc-200">
-            ملاحظة الإغلاق
-            <textarea
-              value={form.closingNote}
-              onChange={(event) => onChange({ ...form, closingNote: event.target.value })}
-              placeholder="فرق 10,000 قيد المراجعة"
-              className="min-h-20 rounded-md border border-white/10 bg-[#252525] p-3 text-sm text-white outline-none focus:border-[#ff5656]"
-            />
-          </label>
-        </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <button type="button" onClick={onCancel} className="h-10 rounded-md border border-white/10 px-4 text-sm text-zinc-200 hover:bg-white/[0.04]">إلغاء</button>
-          <button disabled={isSaving || !expectedCash} type="submit" className="inline-flex h-10 items-center gap-2 rounded-md bg-[#ff5656] px-4 text-sm font-semibold text-white disabled:opacity-50">
-            <Save size={16} />
-            إغلاق الوردية
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 function FinanceOverview({
   salesSummary,
   openShift,
   expectedCash,
+  shiftMovements,
   recentCashShifts,
   cashierOptions,
   pendingRequests,
@@ -659,13 +534,12 @@ function FinanceOverview({
   payments,
   expenses,
   purchases,
-  onOpenShift,
-  onCloseShift,
   isSaving,
 }: {
   salesSummary: FinanceSalesSummary;
   openShift: CashShift | null;
   expectedCash: ExpectedCashBreakdown | null;
+  shiftMovements: CashShiftMovement[];
   recentCashShifts: CashShift[];
   cashierOptions: CashierOption[];
   pendingRequests: PurchaseRequest[];
@@ -673,8 +547,6 @@ function FinanceOverview({
   payments: PurchasePayment[];
   expenses: Expense[];
   purchases: Purchase[];
-  onOpenShift: () => void;
-  onCloseShift: () => void;
   isSaving: boolean;
 }) {
   const today = todayKey();
@@ -778,7 +650,7 @@ function FinanceOverview({
     })),
     ...pendingRequests.slice(0, 3).map((request) => ({
       id: `request:${request.id}`,
-      title: "طلب شراء ينتظر الموافقة",
+      title: "طلب شراء بانتظار قرار مدير النظام",
       description: `طلب شراء #${request.requestNumber} - ${request.requestedByName}`,
     })),
   ].slice(0, 6);
@@ -795,16 +667,6 @@ function FinanceOverview({
         </div>
       </section>
 
-        <CashShiftCard
-          openShift={openShift}
-          expectedCash={expectedCash}
-          recentShifts={recentCashShifts}
-          cashierOptions={cashierOptions}
-          onOpen={onOpenShift}
-          onClose={onCloseShift}
-          isSaving={isSaving}
-      />
-
       <section className="space-y-3">
         <h2 className="text-xl font-semibold text-white">الوضع المالي الحالي</h2>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -818,28 +680,92 @@ function FinanceOverview({
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.55fr)]">
-        <div className="space-y-4">
-          <CashBoxCard cashIn={cashSalesToday} cashExpenses={cashExpensesToday} cashSupplierPayments={cashSupplierPaidToday} cashNet={cashNetToday} />
-          <RecentCashShifts shifts={recentCashShifts.slice(0, 5)} />
-          <FinancialMovements movements={movements} />
-        </div>
-        <FinanceAlerts alerts={alerts} />
-      </section>
+      <FinanceAlerts alerts={alerts} />
+
+      <CashShiftCard
+        openShift={openShift}
+        expectedCash={expectedCash}
+        shiftMovements={shiftMovements}
+        recentShifts={recentCashShifts}
+        cashierOptions={cashierOptions}
+        isSaving={isSaving}
+      />
+
+      <CashBoxCard cashIn={cashSalesToday} cashExpenses={cashExpensesToday} cashSupplierPayments={cashSupplierPaidToday} cashNet={cashNetToday} />
+      <RecentCashShifts shifts={recentCashShifts.slice(0, 5)} />
+      <FinancialMovements movements={movements} />
     </div>
   );
 }
 
-function RequestDetails({ request }: { request: PurchaseRequest }) {
+function itemDecisionTone(status: PurchaseRequest["items"][number]["decisionStatus"]) {
+  if (status === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "rejected") return "border-rose-200 bg-rose-50 text-rose-800";
+  return "border-amber-200 bg-amber-50 text-amber-800";
+}
+
+function RequestDetails({
+  request,
+  canDecide = false,
+  isSaving = false,
+  onApproveItem,
+  onRejectItem,
+}: {
+  request: PurchaseRequest;
+  canDecide?: boolean;
+  isSaving?: boolean;
+  onApproveItem?: (itemId: string) => void;
+  onRejectItem?: (item: PurchaseRequest["items"][number]) => void;
+}) {
   return (
-    <div className="space-y-2">
-      {request.items.map((item) => (
-        <div key={item.id} className="rounded-md border border-[#eee4d8] bg-[#fbfaf7] p-3 text-sm">
-          <p className="font-semibold text-[#2f211c]">{item.inventoryItemName}</p>
-          <p className="text-[#7c6b60]">{formatNumber(item.quantity)} {item.unitCode}</p>
-          {item.notes ? <p className="mt-1 text-[#9a8779]">{item.notes}</p> : null}
-        </div>
-      ))}
+    <div className="space-y-3">
+      <div className="grid gap-2 text-sm md:grid-cols-4">
+        <div className="border border-[#e4d8c8] bg-[#fbfaf7] p-3"><p className="text-xs text-[#7c6b60]">رقم الطلب</p><p className="font-bold text-[#181818]">{purchaseRequestCode(request)}</p></div>
+        <div className="border border-[#e4d8c8] bg-[#fbfaf7] p-3"><p className="text-xs text-[#7c6b60]">طالب الشراء</p><p className="font-bold text-[#181818]">{request.requestedByName}</p></div>
+        <div className="border border-[#e4d8c8] bg-[#fbfaf7] p-3"><p className="text-xs text-[#7c6b60]">الحالة</p><p className="font-bold text-[#181818]">{purchaseRequestStatusLabels[request.status]}</p></div>
+        <div className="border border-[#e4d8c8] bg-[#fbfaf7] p-3"><p className="text-xs text-[#7c6b60]">وقت القرار</p><p className="font-bold text-[#181818]">{formatDateTime(request.decidedAt)}</p></div>
+      </div>
+      <div className="overflow-x-auto border border-[#e4d8c8]">
+        <table className="w-full min-w-[1080px] table-fixed border-collapse text-right text-xs">
+          <thead className="bg-[#2b2421] text-white">
+            <tr>
+              <th className="w-[20%] border-l border-[#e6dacd] px-3 py-2">المادة</th>
+              <th className="w-[10%] border-l border-[#e6dacd] px-3 py-2">الكمية</th>
+              <th className="w-[9%] border-l border-[#e6dacd] px-3 py-2">الوحدة</th>
+              <th className="w-[10%] border-l border-[#e6dacd] px-3 py-2">الرصيد الحالي</th>
+              <th className="w-[13%] border-l border-[#e6dacd] px-3 py-2">الحالة</th>
+              <th className="w-[22%] border-l border-[#e6dacd] px-3 py-2">السبب</th>
+              <th className="w-[16%] px-3 py-2">الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody>
+            {request.items.map((item) => (
+              <tr key={item.id} className="min-h-14 align-top odd:bg-white even:bg-[#fffdfa]">
+                <td className="whitespace-normal break-words border border-[#f0e5da] px-3 py-3 font-bold leading-6 text-[#181818]">{item.inventoryItemName}</td>
+                <td className="whitespace-normal border border-[#f0e5da] px-3 py-3 leading-6">{formatNumber(item.quantity)}</td>
+                <td className="whitespace-normal border border-[#f0e5da] px-3 py-3 leading-6">{item.unitCode}</td>
+                <td className="whitespace-normal border border-[#f0e5da] px-3 py-3 leading-6">{typeof item.stockOnHand === "number" ? formatNumber(item.stockOnHand) : "-"}</td>
+                <td className="whitespace-normal border border-[#f0e5da] px-3 py-3 leading-6"><span className={`inline-flex rounded-md border px-2 py-1 text-xs font-bold ${itemDecisionTone(item.decisionStatus)}`}>{purchaseRequestItemDecisionStatusLabels[item.decisionStatus]}</span></td>
+                <td className="whitespace-normal break-words border border-[#f0e5da] px-3 py-3 leading-6 text-[#4a3b34]">{item.rejectionReason ?? item.notes ?? "-"}</td>
+                <td className="border border-[#f0e5da] px-3 py-3">
+                  {canDecide && item.decisionStatus === "pending" ? (
+                    <div className="flex flex-wrap gap-2">
+                      <button disabled={isSaving} type="button" onClick={() => onApproveItem?.(item.id)} className="inline-flex h-8 items-center gap-1 rounded-md bg-emerald-700 px-2 text-xs font-semibold text-white disabled:opacity-50"><CheckCircle2 size={13} />موافقة</button>
+                      <button disabled={isSaving} type="button" onClick={() => onRejectItem?.(item)} className="inline-flex h-8 items-center gap-1 rounded-md bg-rose-700 px-2 text-xs font-semibold text-white disabled:opacity-50"><XCircle size={13} />رفض</button>
+                    </div>
+                  ) : <span className="text-[#7c6b60]">{item.decisionByName ?? "-"}</span>}
+                </td>
+              </tr>
+            ))}
+            {request.items.length === 0 ? <tr><td colSpan={7} className="px-3 py-6 text-center">لا توجد مواد مرتبطة بهذا الطلب.</td></tr> : null}
+          </tbody>
+        </table>
+      </div>
+      <div className="grid gap-2 text-sm md:grid-cols-2">
+        <div className="border border-[#e4d8c8] bg-[#fbfaf7] p-3"><p className="text-xs text-[#7c6b60]">ملاحظات الطلب</p><p className="font-semibold text-[#181818]">{request.notes ?? "-"}</p></div>
+        <div className="border border-[#e4d8c8] bg-[#fbfaf7] p-3"><p className="text-xs text-[#7c6b60]">قرار المدير</p><p className="font-semibold text-[#181818]">{request.decidedByName ?? "-"} · {request.decisionNotes ?? request.rejectionReason ?? "-"}</p></div>
+      </div>
+      {request.status === "rejected" && request.rejectionReason ? <p className="border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-800">سبب الرفض: {request.rejectionReason}</p> : null}
     </div>
   );
 }
@@ -921,28 +847,28 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
   const [salesSummary, setSalesSummary] = useState<FinanceSalesSummary | null>(null);
   const [openShift, setOpenShift] = useState<CashShift | null>(null);
   const [expectedCash, setExpectedCash] = useState<ExpectedCashBreakdown | null>(null);
+  const [shiftMovements, setShiftMovements] = useState<CashShiftMovement[]>([]);
+  const [openCashShifts, setOpenCashShifts] = useState<CashShift[]>([]);
   const [recentCashShifts, setRecentCashShifts] = useState<CashShift[]>([]);
   const [cashierOptions, setCashierOptions] = useState<CashierOption[]>([]);
-  const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
   const [expandedPurchaseId, setExpandedPurchaseId] = useState<string | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<PurchaseRequest | null>(null);
+  const [rejectRequestItem, setRejectRequestItem] = useState<PurchaseRequest["items"][number] | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
   const [paymentPurchase, setPaymentPurchase] = useState<Purchase | null>(null);
   const [selectedPayment, setSelectedPayment] = useState<PurchasePayment | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [paymentForm, setPaymentForm] = useState(emptyPayment);
-  const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
   const [expenseForm, setExpenseForm] = useState<CreateExpenseInput>(emptyExpense);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
-  const [isOpenShiftModalOpen, setIsOpenShiftModalOpen] = useState(false);
-  const [isCloseShiftModalOpen, setIsCloseShiftModalOpen] = useState(false);
-  const [openShiftForm, setOpenShiftForm] = useState({ cashierId: "", openingCash: "", openingNote: "" });
-  const [closeShiftForm, setCloseShiftForm] = useState({ countedCash: "", closingNote: "" });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const realtimeReloadTimerRef = useRef<number | null>(null);
+  const notifications = useOperationalNotifications({ role: mode === "finance" ? "accountant" : "admin", enabled: mode === "finance" });
 
-  const pendingRequests = requests.filter((request) => request.status === "pending");
+  const pendingRequests = requests.filter((request) => request.status === "pending" || request.status === "decision_in_progress");
   const unpaidPurchases = purchases.filter((purchase) => purchase.paymentStatus === "unpaid");
   const paidPurchases = purchases.filter((purchase) => purchase.paymentStatus === "paid");
   const totalUnpaid = unpaidPurchases.reduce((total, purchase) => total + purchase.totalAmount, 0);
@@ -954,14 +880,16 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
   const visibleExpenses = mode === "finance" ? expenses : [];
   const title = mode === "adminPurchases" ? "متابعة دورة المشتريات" : "الحسابات";
   const subtitle = mode === "adminPurchases" ? "لوحة الإدارة" : "واجهة المحاسب";
+  const canDecidePurchaseRequests = mode === "adminPurchases";
+  const financeTabs = useMemo(() => tabs.map((tab) => tab.id === "requests" && pendingRequests.length > 0 ? { ...tab, label: `طلبات الشراء ${formatNumber(pendingRequests.length)}` } : tab), [pendingRequests.length]);
   const overviewCards = useMemo(() => [
-    { title: "طلبات شراء بانتظار الموافقة", value: formatNumber(pendingRequests.length) },
+    { title: mode === "adminPurchases" ? "طلبات شراء بانتظار قرار المدير" : "طلبات شراء جديدة للاطلاع", value: formatNumber(pendingRequests.length) },
     { title: "فواتير موردين بانتظار الدفع", value: formatNumber(unpaidPurchases.length) },
     { title: "إجمالي غير مدفوع للموردين", value: formatCurrency(totalUnpaid) },
     { title: "مصروفات اليوم", value: formatCurrency(expensesToday) },
     { title: "المدفوع للموردين اليوم", value: formatCurrency(supplierPaidToday) },
     { title: "إجمالي الأموال الخارجة اليوم", value: formatCurrency(totalOutgoingToday) },
-  ], [expensesToday, pendingRequests.length, supplierPaidToday, totalOutgoingToday, totalUnpaid, unpaidPurchases.length]);
+  ], [expensesToday, mode, pendingRequests.length, supplierPaidToday, totalOutgoingToday, totalUnpaid, unpaidPurchases.length]);
 
   const loadData = useCallback(async (showLoading = true) => {
     if (showLoading) {
@@ -969,27 +897,32 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
     }
     setError("");
     try {
-      const [nextRequests, nextPurchases, nextPayments, nextExpenses, nextSalesSummary, nextOpenShift, nextRecentCashShifts, nextCashierOptions] = await Promise.all([
+      const [nextRequests, nextPurchases, nextPayments, nextExpenses, nextSalesSummary, nextOpenCashShifts, nextRecentCashShifts, nextCashierOptions] = await Promise.all([
         getPurchaseRequests(),
         getPurchases(),
         getPurchasePayments(),
         mode === "finance" ? getExpenses() : Promise.resolve([]),
         mode === "finance" ? getFinanceSalesSummary() : Promise.resolve(null),
-        mode === "finance" ? getOpenCashShift() : Promise.resolve(null),
+        mode === "finance" ? getOpenCashShifts() : Promise.resolve([]),
         mode === "finance" ? getRecentCashShifts() : Promise.resolve([]),
         mode === "finance" ? getCashierOptions() : Promise.resolve([]),
       ]);
-      const nextExpectedCash = nextOpenShift ? await getExpectedCashForShift(nextOpenShift.id) : null;
+      const nextOpenShift = nextOpenCashShifts[0] ?? null;
+      const [nextExpectedCash, nextShiftMovements] = nextOpenShift
+        ? await Promise.all([getExpectedCashForShift(nextOpenShift.id), getCashShiftMovements(nextOpenShift.id)])
+        : [null, [] as CashShiftMovement[]];
       setRequests(nextRequests);
       setPurchases(nextPurchases);
       setPayments(nextPayments);
       setExpenses(nextExpenses);
       setSalesSummary(nextSalesSummary);
       setOpenShift(nextOpenShift);
+      setOpenCashShifts(nextOpenCashShifts);
       setExpectedCash(nextExpectedCash);
+      setShiftMovements(nextShiftMovements);
       setRecentCashShifts(nextRecentCashShifts);
       setCashierOptions(nextCashierOptions);
-      return { nextRequests, nextPurchases, nextPayments, nextExpenses, nextSalesSummary, nextOpenShift, nextExpectedCash, nextRecentCashShifts, nextCashierOptions };
+      return { nextRequests, nextPurchases, nextPayments, nextExpenses, nextSalesSummary, nextOpenCashShifts, nextOpenShift, nextExpectedCash, nextShiftMovements, nextRecentCashShifts, nextCashierOptions };
     } catch (loadError) {
       logSupabaseError("[finance dashboard load]", loadError);
       setError("تعذر تحميل بيانات الحسابات.");
@@ -1009,9 +942,6 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
   }, [loadData]);
 
   useEffect(() => {
-    if (mode !== "finance") {
-      return;
-    }
 
     let isMounted = true;
     const supabase = createClient();
@@ -1033,15 +963,19 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
     }
 
     const channel = supabase
-      .channel("finance-dashboard-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, scheduleReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "table_sessions" }, scheduleReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, scheduleReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_payments" }, scheduleReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "purchases" }, scheduleReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "cash_shifts" }, scheduleReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "cash_movements" }, scheduleReload)
+      .channel(`finance-dashboard-realtime-${mode}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "table_sessions" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_payments" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchases" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_items" }, () => scheduleReload())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "purchase_requests" }, () => scheduleReload())
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "purchase_requests" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_request_items" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "cash_shifts" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "cash_movements" }, () => scheduleReload())
       .subscribe((status, subscriptionError) => {
         if (subscriptionError) {
           console.warn("Finance dashboard realtime subscription error", subscriptionError);
@@ -1059,7 +993,6 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
         window.clearTimeout(realtimeReloadTimerRef.current);
         realtimeReloadTimerRef.current = null;
       }
-
       void supabase.removeChannel(channel);
     };
   }, [loadData, mode]);
@@ -1069,16 +1002,24 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
     window.setTimeout(() => setMessage(""), 3000);
   }
 
-  async function decide(request: PurchaseRequest, decision: "approved" | "rejected") {
+  async function decideItem(itemId: string, decision: "approved" | "rejected") {
+    const reason = decision === "rejected" ? rejectionReason.trim() : undefined;
+    if (decision === "rejected" && !reason) {
+      setError("سبب الرفض مطلوب.");
+      return;
+    }
     setIsSaving(true);
     setError("");
     try {
-      const updated = await decidePurchaseRequest({ requestId: request.id, decision, decisionNotes: decisionNotes[request.id] });
+      const updated = await decidePurchaseRequestItem({ requestItemId: itemId, decision, rejectionReason: reason });
       setRequests((current) => current.map((item) => item.id === updated.id ? updated : item));
-      flash(decision === "approved" ? "تمت الموافقة على طلب الشراء" : "تم رفض طلب الشراء");
+      setSelectedRequest((current) => current?.id === updated.id ? updated : current);
+      setRejectRequestItem(null);
+      setRejectionReason("");
+      flash(decision === "approved" ? "تمت الموافقة على المادة" : "تم رفض المادة");
     } catch (decisionError) {
-      logSupabaseError("[purchase request decision]", decisionError);
-      setError("تعذر حفظ قرار طلب الشراء.");
+      logSupabaseError("[purchase request item decision]", decisionError);
+      setError(requestDecisionError(decisionError));
     } finally {
       setIsSaving(false);
     }
@@ -1087,12 +1028,17 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
   async function submitPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!paymentPurchase) return;
+    if (paymentForm.paymentMethod === "cash" && openCashShifts.length > 1 && !paymentForm.cashShiftId) {
+      setError("اختر الصندوق الذي ستخرج منه دفعة المورد.");
+      return;
+    }
     setIsSaving(true);
     setError("");
     try {
       const payload: PayPurchaseInput = {
         purchaseId: paymentPurchase.id,
         paymentMethod: paymentForm.paymentMethod,
+        cashShiftId: paymentForm.paymentMethod === "cash" ? paymentForm.cashShiftId || openCashShifts[0]?.id : undefined,
         referenceNumber: paymentForm.referenceNumber,
         notes: paymentForm.notes,
       };
@@ -1133,72 +1079,6 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
     }
   }
 
-  async function submitOpenShift(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const openingCash = parseCashInput(openShiftForm.openingCash);
-    if (!openShiftForm.cashierId) {
-      setError("اختر الكاشير قبل فتح الوردية.");
-      return;
-    }
-
-    if (openingCash === null) {
-      setError("أدخل رصيداً افتتاحياً صحيحاً.");
-      return;
-    }
-
-    setIsSaving(true);
-    setError("");
-    try {
-      const payload: OpenCashShiftInput = {
-        cashierId: openShiftForm.cashierId,
-        openingCash,
-        openingNote: openShiftForm.openingNote,
-      };
-      const created = await openCashShift(payload);
-      setOpenShift(created);
-      setOpenShiftForm({ cashierId: "", openingCash: "", openingNote: "" });
-      setIsOpenShiftModalOpen(false);
-      await loadData();
-      flash("تم فتح الوردية");
-    } catch (shiftError) {
-      logSupabaseError("[cash shift open submit]", shiftError);
-      setError(shiftActionError(shiftError, "open"));
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function submitCloseShift(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const countedCash = parseCashInput(closeShiftForm.countedCash);
-    if (countedCash === null) {
-      setError("أدخل النقد المعدود بشكل صحيح.");
-      return;
-    }
-
-    setIsSaving(true);
-    setError("");
-    try {
-      const payload: CloseCashShiftInput = {
-        cashierId: openShift?.cashierId,
-        countedCash,
-        closingNote: closeShiftForm.closingNote,
-      };
-      await closeCashShift(payload);
-      setCloseShiftForm({ countedCash: "", closingNote: "" });
-      setIsCloseShiftModalOpen(false);
-      setOpenShift(null);
-      setExpectedCash(null);
-      await loadData();
-      flash("تم إغلاق الوردية");
-    } catch (shiftError) {
-      logSupabaseError("[cash shift close submit]", shiftError);
-      setError(shiftActionError(shiftError, "close"));
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
   function openPaymentForPurchase(purchaseId: string) {
     const payment = payments.find((item) => item.purchaseId === purchaseId);
     if (payment) setSelectedPayment(payment);
@@ -1227,7 +1107,7 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
       ) : null}
 
       {mode === "finance" ? (
-        <ManagementTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} ariaLabel="أقسام الحسابات" />
+        <ManagementTabs tabs={financeTabs} activeTab={activeTab} onChange={setActiveTab} ariaLabel="أقسام الحسابات" />
       ) : null}
 
       {message ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p> : null}
@@ -1240,6 +1120,7 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
           salesSummary={salesSummary}
           openShift={openShift}
           expectedCash={expectedCash}
+          shiftMovements={shiftMovements}
           recentCashShifts={recentCashShifts}
           cashierOptions={cashierOptions}
           pendingRequests={pendingRequests}
@@ -1247,14 +1128,6 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
           payments={payments}
           expenses={expenses}
           purchases={purchases}
-          onOpenShift={() => {
-            setOpenShiftForm({ cashierId: cashierOptions.length === 1 ? cashierOptions[0].id : "", openingCash: "", openingNote: "" });
-            setIsOpenShiftModalOpen(true);
-          }}
-          onCloseShift={() => {
-            setCloseShiftForm({ countedCash: expectedCash ? String(expectedCash.expectedCash) : "", closingNote: "" });
-            setIsCloseShiftModalOpen(true);
-          }}
           isSaving={isSaving}
         />
       ) : null}
@@ -1267,32 +1140,58 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
 
       {(mode !== "finance" || activeTab === "requests") ? (
         <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
-          <div className="border-b border-[#eee4d8] p-4"><h2 className="font-semibold text-[#2f211c]">طلبات الشراء</h2></div>
+          <div className="border-b border-[#eee4d8] p-4">
+            <h2 className="font-semibold text-[#2f211c]">طلبات الشراء</h2>
+            <p className="mt-1 text-sm text-[#7c6b60]">{canDecidePurchaseRequests ? "قرار الموافقة أو الرفض من مدير النظام فقط." : "للاطلاع فقط — بانتظار قرار مدير النظام."}</p>
+          </div>
           {visibleRequests.length === 0 ? <p className="p-4 text-sm text-[#7c6b60]">لا توجد طلبات مطابقة حالياً</p> : null}
-          <div className="divide-y divide-[#eee4d8]">
-            {visibleRequests.map((request) => (
-              <article key={request.id} className="p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-[#2f211c]">طلب شراء #{request.requestNumber}</p>
-                    <p className="text-sm text-[#7c6b60]">{purchaseRequestStatusLabels[request.status]} · {request.requestedByName} · {formatDateTime(request.createdAt)}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={() => setExpandedRequestId(expandedRequestId === request.id ? null : request.id)} className="inline-flex h-9 items-center gap-2 rounded-md border border-[#e4d8c8] px-3 text-sm text-[#4a3b34] hover:bg-[#f5eee6]"><Eye size={16} />عرض</button>
-                    {request.status === "pending" ? (
-                      <>
-                        <button disabled={isSaving} type="button" onClick={() => void decide(request, "approved")} className="inline-flex h-9 items-center gap-2 rounded-md bg-emerald-700 px-3 text-sm font-semibold text-white disabled:opacity-50"><CheckCircle2 size={16} />موافقة</button>
-                        <button disabled={isSaving} type="button" onClick={() => void decide(request, "rejected")} className="inline-flex h-9 items-center gap-2 rounded-md bg-rose-700 px-3 text-sm font-semibold text-white disabled:opacity-50"><XCircle size={16} />رفض</button>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-                {request.status === "pending" ? (
-                  <input value={decisionNotes[request.id] ?? ""} onChange={(event) => setDecisionNotes((current) => ({ ...current, [request.id]: event.target.value }))} placeholder="ملاحظة القرار اختيارية" className="mt-3 h-10 w-full rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 text-sm outline-none" />
-                ) : null}
-                {expandedRequestId === request.id ? <div className="mt-3"><RequestDetails request={request} /></div> : null}
-              </article>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1200px] border-collapse text-right text-xs">
+              <thead className="bg-[#2b2421] text-white">
+                <tr>
+                  <th className="border-l border-[#e6dacd] px-3 py-2">رقم الطلب</th>
+                  <th className="border-l border-[#e6dacd] px-3 py-2">التاريخ</th>
+                  <th className="border-l border-[#e6dacd] px-3 py-2">طالب الشراء</th>
+                  <th className="border-l border-[#e6dacd] px-3 py-2">المواد</th>
+                  <th className="border-l border-[#e6dacd] px-3 py-2">الكمية المطلوبة</th>
+                  <th className="border-l border-[#e6dacd] px-3 py-2">عدد المواد</th>
+                  <th className="border-l border-[#e6dacd] px-3 py-2">القيمة التقديرية</th>
+                  <th className="border-l border-[#e6dacd] px-3 py-2">الحالة</th>
+                  <th className="border-l border-[#e6dacd] px-3 py-2">سبب الطلب / الملاحظة</th>
+                  <th className="px-3 py-2">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRequests.map((request) => {
+                  const singlePendingItem = request.items.length === 1 && request.items[0]?.decisionStatus === "pending" ? request.items[0] : null;
+                  return (
+                    <tr key={request.id} className="align-top odd:bg-white even:bg-[#fffdfa] hover:bg-[#fff4eb]">
+                      <td className="border border-[#f0e5da] px-3 py-2 font-bold text-[#181818]" dir="ltr">{purchaseRequestCode(request)}</td>
+                      <td className="border border-[#f0e5da] px-3 py-2">{formatDateTime(request.createdAt)}</td>
+                      <td className="border border-[#f0e5da] px-3 py-2 font-semibold text-[#181818]">{request.requestedByName}</td>
+                      <td className="border border-[#f0e5da] px-3 py-2 font-semibold text-[#181818]">{requestItemSummary(request)}</td>
+                      <td className="border border-[#f0e5da] px-3 py-2 font-bold text-[#181818]">{request.items.length === 1 ? singlePurchaseRequestQuantity(request) : purchaseRequestItemsSummary(request)}</td>
+                      <td className="border border-[#f0e5da] px-3 py-2">{formatNumber(request.items.length)}</td>
+                      <td className="border border-[#f0e5da] px-3 py-2">{formatCurrency(requestEstimatedValue(request))}</td>
+                      <td className="whitespace-normal border border-[#f0e5da] px-3 py-3 leading-6"><span className={`inline-flex rounded-md border px-2 py-1 text-xs font-bold ${requestStatusTone(request.status)}`}>{purchaseRequestStatusLabels[request.status]}</span></td>
+                      <td className="whitespace-normal break-words border border-[#f0e5da] px-3 py-3 leading-6">{request.status === "rejected" ? request.rejectionReason ?? request.decisionNotes ?? "-" : request.notes ?? "-"}</td>
+                      <td className="border border-[#f0e5da] px-3 py-2">
+                        <div className="flex flex-wrap gap-2">
+                          {canDecidePurchaseRequests && singlePendingItem ? (
+                            <>
+                              <button disabled={isSaving} type="button" onClick={() => void decideItem(singlePendingItem.id, "approved")} className="inline-flex h-8 items-center gap-1 rounded-md bg-emerald-700 px-2 text-xs font-semibold text-white disabled:opacity-50"><CheckCircle2 size={13} />موافقة</button>
+                              <button disabled={isSaving} type="button" onClick={() => { setRejectRequestItem(singlePendingItem); setRejectionReason(""); }} className="inline-flex h-8 items-center gap-1 rounded-md bg-rose-700 px-2 text-xs font-semibold text-white disabled:opacity-50"><XCircle size={13} />رفض</button>
+                            </>
+                          ) : null}
+                          <button type="button" onClick={() => setSelectedRequest(request)} className="inline-flex h-8 items-center gap-2 rounded-md border border-[#e4d8c8] px-3 text-xs font-semibold text-[#4a3b34] hover:bg-[#f5eee6]"><Eye size={14} />عرض</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {visibleRequests.length === 0 ? <tr><td colSpan={10} className="px-3 py-8 text-center text-sm text-[#7c6b60]">لا توجد طلبات شراء مطابقة.</td></tr> : null}
+              </tbody>
+            </table>
           </div>
         </section>
       ) : null}
@@ -1352,6 +1251,19 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
             <p className="mt-1 text-sm text-[#7c6b60]">فاتورة #{paymentPurchase.purchaseNumber} · {formatCurrency(paymentPurchase.totalAmount)}</p>
             <div className="mt-4 grid gap-3">
               <select value={paymentForm.paymentMethod} onChange={(event) => setPaymentForm((current) => ({ ...current, paymentMethod: event.target.value as ExpensePaymentMethod }))} className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 text-sm outline-none">{Object.entries(expensePaymentMethodLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+              {paymentForm.paymentMethod === "cash" && openCashShifts.length > 1 ? (
+                <label className="grid gap-1 text-sm font-medium text-[#4a3b34]">
+                  الصندوق الذي ستخرج منه الدفعة
+                  <select required value={paymentForm.cashShiftId} onChange={(event) => setPaymentForm((current) => ({ ...current, cashShiftId: event.target.value }))} className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 text-sm outline-none">
+                    <option value="">اختر وردية مفتوحة</option>
+                    {openCashShifts.map((shift) => (
+                      <option key={shift.id} value={shift.id}>
+                        {shift.cashierName ?? shift.cashierId.slice(0, 8)} — {formatDate(`${shift.businessDate}T00:00:00+03:00`)} — {formatTime(shift.openedAt)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <label className="grid gap-1 text-sm font-medium text-[#4a3b34]">
                 مرجع خارجي اختياري
                 <input value={paymentForm.referenceNumber} onChange={(event) => setPaymentForm((current) => ({ ...current, referenceNumber: event.target.value }))} placeholder="رقم حوالة 45872" className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 text-sm outline-none" />
@@ -1360,6 +1272,60 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
               <textarea value={paymentForm.notes} onChange={(event) => setPaymentForm((current) => ({ ...current, notes: event.target.value }))} placeholder="ملاحظات" className="min-h-24 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] p-3 text-sm outline-none" />
             </div>
             <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setPaymentPurchase(null)} className="h-10 rounded-md border border-[#e4d8c8] px-4 text-sm">إلغاء</button><button disabled={isSaving} type="submit" className="inline-flex h-10 items-center gap-2 rounded-md bg-[#5d4032] px-4 text-sm font-semibold text-white disabled:opacity-50"><Save size={16} />حفظ الدفع</button></div>
+          </form>
+        </div>
+      ) : null}
+
+      {selectedRequest ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+          <section className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-md border border-[#c9b8a6] bg-white shadow-xl">
+            <div className="flex items-center justify-between gap-3 border-b border-[#e4d8c8] bg-[#f0e7dc] px-4 py-3">
+              <div>
+                <p className="text-sm font-bold text-[#7c6b60]">تفاصيل طلب الشراء</p>
+                <h2 className="text-xl font-black text-[#181818]">{purchaseRequestCode(selectedRequest)}</h2>
+              </div>
+              <button type="button" onClick={() => setSelectedRequest(null)} className="rounded-md border border-[#c9b8a6] bg-white p-2 text-[#181818]" aria-label="إغلاق">
+                <XCircle size={18} />
+              </button>
+            </div>
+            <div className="max-h-[78vh] overflow-auto p-4">
+              <RequestDetails
+                request={selectedRequest}
+                canDecide={canDecidePurchaseRequests}
+                isSaving={isSaving}
+                onApproveItem={(itemId) => void decideItem(itemId, "approved")}
+                onRejectItem={(item) => { setRejectRequestItem(item); setRejectionReason(""); }}
+              />
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {rejectRequestItem ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void decideItem(rejectRequestItem.id, "rejected");
+            }}
+            className="w-full max-w-lg rounded-md border border-[#e4d8c8] bg-white p-5 shadow-xl"
+          >
+            <p className="text-sm font-bold text-[#7c6b60]">رفض مادة من طلب الشراء</p>
+            <h2 className="mt-1 text-xl font-black text-[#181818]">{rejectRequestItem.inventoryItemName}</h2>
+            <label className="mt-4 grid gap-2 text-sm font-bold text-[#4a3b34]">
+              سبب الرفض
+              <textarea
+                required
+                value={rejectionReason}
+                onChange={(event) => setRejectionReason(event.target.value)}
+                placeholder="اكتب سبب الرفض بوضوح"
+                className="min-h-28 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] p-3 text-sm outline-none"
+              />
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => { setRejectRequestItem(null); setRejectionReason(""); }} className="h-10 rounded-md border border-[#e4d8c8] px-4 text-sm">إلغاء</button>
+              <button disabled={isSaving || !rejectionReason.trim()} type="submit" className="h-10 rounded-md bg-rose-700 px-4 text-sm font-semibold text-white disabled:opacity-50">تأكيد الرفض</button>
+            </div>
           </form>
         </div>
       ) : null}
@@ -1385,30 +1351,9 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
         </div>
       ) : null}
 
-      {isOpenShiftModalOpen ? (
-        <OpenShiftModal
-          form={openShiftForm}
-          cashierOptions={cashierOptions}
-          onChange={setOpenShiftForm}
-          onCancel={() => setIsOpenShiftModalOpen(false)}
-          onSubmit={submitOpenShift}
-          isSaving={isSaving}
-        />
-      ) : null}
-
-      {isCloseShiftModalOpen ? (
-        <CloseShiftModal
-          expectedCash={expectedCash}
-          form={closeShiftForm}
-          onChange={setCloseShiftForm}
-          onCancel={() => setIsCloseShiftModalOpen(false)}
-          onSubmit={submitCloseShift}
-          isSaving={isSaving}
-        />
-      ) : null}
-
       {selectedPayment ? <PurchasePaymentVoucherDialog payment={selectedPayment} onClose={() => setSelectedPayment(null)} /> : null}
       {selectedExpense ? <ExpenseVoucherDialog expense={selectedExpense} onClose={() => setSelectedExpense(null)} /> : null}
+      <OperationalToast toast={notifications.toast} />
     </div>
   );
 }

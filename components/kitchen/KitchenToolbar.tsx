@@ -29,7 +29,7 @@ export function KitchenToolbar({ searchTerm, filter, pendingReceiptCount, onSear
             value={searchTerm}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder="ابحث برقم الطاولة أو الطلب..."
-            className="h-12 w-full rounded-lg border border-white/10 bg-[#171513] pr-11 pl-12 text-base text-[#FFF8EE] outline-none placeholder:text-[#756d65] focus:border-[#D88A3D]"
+            className="h-12 w-full rounded-lg border border-white/10 bg-[#171513] pr-11 pl-12 text-base text-[#FFF8EE] outline-none placeholder:text-[#b8aea4] focus:border-[#D88A3D]"
           />
           {searchTerm ? (
             <button type="button" onClick={() => onSearchChange("")} className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#C9BEB2] hover:bg-[#302B27]" aria-label="مسح البحث">

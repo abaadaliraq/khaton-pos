@@ -28,6 +28,81 @@ type PaymentRow = {
   cashier_profile: ProfileNameRow | null;
 };
 
+type RestaurantTableReportRow = {
+  id: string;
+  table_number: number;
+  name: string | null;
+  status: "available" | "occupied" | "cleaning";
+  is_active: boolean;
+};
+
+type TableSessionReportRow = {
+  id: string;
+  table_id: string;
+  captain_id: string;
+  status: "active" | "closed";
+  opened_at: string;
+  closed_at: string | null;
+  captain_profile: ProfileNameRow | null;
+};
+
+type TableOrderReportRow = {
+  id: string;
+  order_number: number;
+  table_session_id: string | null;
+  round_no: number | null;
+  captain_id: string;
+  status: "draft" | "submitted" | "preparing" | "ready" | "served" | "awaiting_payment" | "paid" | "cancelled";
+  total: number | string;
+  opened_at: string;
+  submitted_at: string | null;
+  paid_at: string | null;
+  payments: { amount: number | string; status: "completed" | "voided" }[] | null;
+  order_items: { quantity: number | string }[] | null;
+};
+
+type TablePerformancePayloadRow = {
+  tableId: string;
+  tableNumber: number;
+  tableLabel: string;
+  tableName: string | null;
+  tableStatus: string;
+  sessionCount: number;
+  completedSessionCount: number;
+  activeSessionCount: number;
+  orderCount: number;
+  additionalOrderCount: number;
+  paidSales: number;
+  averageSessionValue: number;
+  averageDurationMinutes: number | null;
+  firstUseAt: string | null;
+  lastUseAt: string | null;
+  lastPreviousUseAt: string | null;
+  note: string;
+};
+
+type TablePerformanceSessionDetail = {
+  sessionId: string;
+  tableId: string;
+  openedAt: string;
+  closedAt: string | null;
+  status: string;
+  durationMinutes: number | null;
+  orderCount: number;
+  additionalOrderCount: number;
+  paidSales: number;
+  captainName: string;
+  orders: {
+    orderId: string;
+    roundNo: number;
+    orderNumber: number;
+    itemCount: number;
+    total: number;
+    paidSales: number;
+    status: string;
+  }[];
+};
+
 type SnapshotRow = {
   id: string;
   report_number: number;
@@ -49,6 +124,7 @@ type SnapshotRow = {
 
 const baghdadTimeZone = "Asia/Baghdad";
 const calculationVersion = "reports_phase_1_v1" as const;
+const tablePerformanceCalculationVersion = "reports_phase_2_table_performance_v1" as const;
 
 const reportTitles: Record<ReportType, string> = {
   financial: "تقرير الحسابات",
@@ -57,6 +133,7 @@ const reportTitles: Record<ReportType, string> = {
   waste: "تقرير الهدر والتلف",
   purchases: "تقرير المشتريات",
   cash_shifts: "تقرير ورديات الصندوق",
+  table_performance: "تقرير أداء الطاولات",
 };
 
 export const reportTypeLabels: Record<ReportType, string> = {
@@ -66,12 +143,14 @@ export const reportTypeLabels: Record<ReportType, string> = {
   waste: "الهدر والتلف",
   purchases: "المشتريات",
   cash_shifts: "ورديات الصندوق",
+  table_performance: "أداء الطاولات",
 };
 
 export const periodTypeLabels: Record<ReportPeriodType, string> = {
   daily: "اليوم",
   weekly: "هذا الأسبوع",
   monthly: "هذا الشهر",
+  yearly: "هذه السنة",
   custom: "فترة مخصصة",
 };
 
@@ -160,6 +239,10 @@ function formatTime(value: string) {
   return new Intl.DateTimeFormat("ar-IQ", { timeZone: baghdadTimeZone, timeStyle: "short" }).format(new Date(value));
 }
 
+function formatDateTime(value: string) {
+  return `${formatDate(value)} ${formatTime(value)}`;
+}
+
 function formatMethod(method: ExpensePaymentMethod | "-") {
   if (method === "cash") return "نقد";
   if (method === "card") return "بطاقة";
@@ -205,6 +288,14 @@ function startOfMonth(dateKey: string) {
   return dateKey.slice(0, 8) + "01";
 }
 
+function startOfYear(dateKey: string) {
+  return dateKey.slice(0, 4) + "-01-01";
+}
+
+function endOfYear(dateKey: string) {
+  return dateKey.slice(0, 4) + "-12-31";
+}
+
 function endOfMonth(dateKey: string) {
   const [year, month] = dateKey.split("-").map(Number);
   return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
@@ -218,6 +309,7 @@ export function resolveReportRange(periodType: ReportPeriodType, customStart?: s
     return { periodType, startDate: start, endDate: addDays(start, 6), timezone: baghdadTimeZone };
   }
   if (periodType === "monthly") return { periodType, startDate: startOfMonth(today), endDate: endOfMonth(today), timezone: baghdadTimeZone };
+  if (periodType === "yearly") return { periodType, startDate: startOfYear(today), endDate: endOfYear(today), timezone: baghdadTimeZone };
   return { periodType, startDate: customStart || today, endDate: customEnd || customStart || today, timezone: baghdadTimeZone };
 }
 
@@ -244,7 +336,7 @@ function stockStatus(item: InventoryItem) {
   return "available";
 }
 
-function makeReport(reportType: ReportType, range: ReportRange, summary: Record<string, string | number>, columns: ReportTableColumn[], rows: ReportTableRow[], payload: Record<string, unknown>, notes: string[], sections: ReportSection[] = []): GeneratedReport {
+function makeReport(reportType: ReportType, range: ReportRange, summary: Record<string, string | number>, columns: ReportTableColumn[], rows: ReportTableRow[], payload: Record<string, unknown>, notes: string[], sections: ReportSection[] = [], version: string = calculationVersion): GeneratedReport {
   return {
     reportType,
     title: reportTitles[reportType],
@@ -256,7 +348,7 @@ function makeReport(reportType: ReportType, range: ReportRange, summary: Record<
     rows,
     sections,
     payload,
-    calculationVersion,
+    calculationVersion: version,
     notes,
   };
 }
@@ -276,12 +368,409 @@ async function getCompletedPayments(range: ReportRange) {
   return (data ?? []) as unknown as PaymentRow[];
 }
 
+function tableLabel(table: Pick<RestaurantTableReportRow, "table_number">) {
+  return `طاولة ${table.table_number}`;
+}
+
+function tableStatusLabel(status: RestaurantTableReportRow["status"], isActive: boolean) {
+  if (!isActive) return "معطلة";
+  if (status === "available") return "متاحة";
+  if (status === "occupied") return "مشغولة";
+  return "تنظيف";
+}
+
+function orderStatusLabel(status: TableOrderReportRow["status"]) {
+  const labels: Record<TableOrderReportRow["status"], string> = {
+    draft: "مسودة",
+    submitted: "مرسل",
+    preparing: "قيد التحضير",
+    ready: "جاهز",
+    served: "تم التقديم",
+    awaiting_payment: "بانتظار الدفع",
+    paid: "مدفوع",
+    cancelled: "ملغى",
+  };
+  return labels[status];
+}
+
+function sessionStatusLabel(status: TableSessionReportRow["status"]) {
+  return status === "closed" ? "مغلقة" : "نشطة";
+}
+
+function formatDuration(minutes: number | null) {
+  if (minutes === null || !Number.isFinite(minutes) || minutes < 0) return "-";
+  if (minutes < 60) return `${Math.round(minutes)} دقيقة`;
+  const hours = Math.floor(minutes / 60);
+  const remaining = Math.round(minutes % 60);
+  return remaining > 0 ? `${hours} ساعة و${remaining} دقيقة` : `${hours} ساعة`;
+}
+
+function sessionDurationMinutes(session: TableSessionReportRow) {
+  if (!session.closed_at) return null;
+  const opened = Date.parse(session.opened_at);
+  const closed = Date.parse(session.closed_at);
+  if (!Number.isFinite(opened) || !Number.isFinite(closed) || closed < opened) return null;
+  return Math.round((closed - opened) / 60000);
+}
+
+function paidOrderSales(order: Pick<TableOrderReportRow, "payments">) {
+  return (order.payments ?? []).filter((payment) => payment.status === "completed").reduce((total, payment) => total + asNumber(payment.amount), 0);
+}
+
+function orderItemCount(order: Pick<TableOrderReportRow, "order_items">) {
+  return (order.order_items ?? []).reduce((total, item) => total + asNumber(item.quantity), 0);
+}
+
+function makeRankingRows(rows: TablePerformancePayloadRow[], mode: "sessions" | "sales" | "average", limit = 5) {
+  const sorted = [...rows]
+    .filter((row) => row.sessionCount > 0)
+    .sort((first, second) => {
+      if (mode === "sessions") return second.sessionCount - first.sessionCount || first.tableNumber - second.tableNumber;
+      if (mode === "average") return second.averageSessionValue - first.averageSessionValue || first.tableNumber - second.tableNumber;
+      return second.paidSales - first.paidSales || first.tableNumber - second.tableNumber;
+    })
+    .slice(0, limit);
+
+  return sorted.map((row, index) => ({
+    rank: index + 1,
+    table: row.tableLabel,
+    sessions: `${row.sessionCount} جلسة`,
+    sales: formatCurrency(row.paidSales),
+    average: formatCurrency(row.averageSessionValue),
+  }));
+}
+
+function makeLowUsageRows(rows: TablePerformancePayloadRow[], limit = 5) {
+  return [...rows]
+    .filter((row) => row.sessionCount > 0)
+    .sort((first, second) => first.sessionCount - second.sessionCount || first.paidSales - second.paidSales || first.tableNumber - second.tableNumber)
+    .slice(0, limit)
+    .map((row, index) => ({
+      rank: index + 1,
+      table: row.tableLabel,
+      sessions: `${row.sessionCount} جلسة`,
+      sales: formatCurrency(row.paidSales),
+      status: row.tableStatus,
+    }));
+}
+
+function makeLowestRevenueRows(rows: TablePerformancePayloadRow[], limit = 5) {
+  return [...rows]
+    .filter((row) => row.sessionCount > 0)
+    .sort((first, second) => first.paidSales - second.paidSales || first.tableNumber - second.tableNumber)
+    .slice(0, limit)
+    .map((row, index) => ({
+      rank: index + 1,
+      table: row.tableLabel,
+      sessions: `${row.sessionCount} جلسة`,
+      sales: formatCurrency(row.paidSales),
+      status: row.tableStatus,
+    }));
+}
+
+export async function generateTablePerformanceReport(range: ReportRange): Promise<GeneratedReport> {
+  const supabase = createClient();
+  const { start, endExclusive } = rangeToIso(range);
+  const [
+    { data: tables, error: tablesError },
+    { data: sessions, error: sessionsError },
+    { data: legacyOrders, error: legacyOrdersError },
+  ] = await Promise.all([
+    supabase
+      .from("restaurant_tables" as never)
+      .select("id, table_number, name, status, is_active")
+      .order("table_number", { ascending: true }),
+    supabase
+      .from("table_sessions" as never)
+      .select("id, table_id, captain_id, status, opened_at, closed_at, captain_profile:profiles!table_sessions_captain_id_fkey(full_name, username)")
+      .gte("opened_at" as never, start as never)
+      .lt("opened_at" as never, endExclusive as never)
+      .order("opened_at", { ascending: true }),
+    supabase
+      .from("orders" as never)
+      .select("id")
+      .is("table_session_id" as never, null)
+      .gte("opened_at" as never, start as never)
+      .lt("opened_at" as never, endExclusive as never)
+      .neq("status" as never, "cancelled" as never),
+  ]);
+
+  if (tablesError) throw tablesError;
+  if (sessionsError) throw sessionsError;
+  if (legacyOrdersError) throw legacyOrdersError;
+
+  const tableRows = (tables ?? []) as unknown as RestaurantTableReportRow[];
+  const sessionRows = (sessions ?? []) as unknown as TableSessionReportRow[];
+  const sessionIds = sessionRows.map((session) => session.id);
+  let orderRows: TableOrderReportRow[] = [];
+
+  if (sessionIds.length > 0) {
+    const { data: orders, error: ordersError } = await supabase
+      .from("orders" as never)
+      .select("id, order_number, table_session_id, round_no, captain_id, status, total, opened_at, submitted_at, paid_at, payments(amount, status), order_items(quantity)")
+      .in("table_session_id" as never, sessionIds as never)
+      .order("round_no", { ascending: true });
+
+    if (ordersError) throw ordersError;
+    orderRows = (orders ?? []) as unknown as TableOrderReportRow[];
+  }
+
+  const sessionsByTable = new Map<string, TableSessionReportRow[]>();
+  const ordersBySession = new Map<string, TableOrderReportRow[]>();
+  const previousUseByTable = new Map<string, string>();
+
+  for (const session of sessionRows) {
+    sessionsByTable.set(session.table_id, [...(sessionsByTable.get(session.table_id) ?? []), session]);
+  }
+
+  for (const order of orderRows) {
+    if (order.table_session_id) ordersBySession.set(order.table_session_id, [...(ordersBySession.get(order.table_session_id) ?? []), order]);
+  }
+
+  if (tableRows.length > 0) {
+    const { data: previousSessions } = await supabase
+      .from("table_sessions" as never)
+      .select("table_id, opened_at")
+      .lt("opened_at" as never, start as never)
+      .order("opened_at", { ascending: false });
+    for (const row of (previousSessions ?? []) as unknown as { table_id: string; opened_at: string }[]) {
+      if (!previousUseByTable.has(row.table_id)) previousUseByTable.set(row.table_id, row.opened_at);
+    }
+  }
+
+  const sessionDetails: TablePerformanceSessionDetail[] = [];
+  const trendByTable = new Map<string, Map<string, { sessions: number; sales: number; additions: number }>>();
+
+  const payloadRows: TablePerformancePayloadRow[] = tableRows.map((table) => {
+    const tableSessions = sessionsByTable.get(table.id) ?? [];
+    const tableSessionDetails = tableSessions.map((session) => {
+      const sessionOrders = ordersBySession.get(session.id) ?? [];
+      const validOrders = sessionOrders.filter((order) => order.status !== "cancelled");
+      const paidSales = validOrders.reduce((total, order) => total + paidOrderSales(order), 0);
+      const durationMinutes = sessionDurationMinutes(session);
+      const detail: TablePerformanceSessionDetail = {
+        sessionId: session.id,
+        tableId: table.id,
+        openedAt: session.opened_at,
+        closedAt: session.closed_at,
+        status: sessionStatusLabel(session.status),
+        durationMinutes,
+        orderCount: validOrders.length,
+        additionalOrderCount: validOrders.filter((order) => (order.round_no ?? 1) > 1).length,
+        paidSales,
+        captainName: profileName(session.captain_profile),
+        orders: validOrders.map((order) => ({
+          orderId: order.id,
+          roundNo: order.round_no ?? 1,
+          orderNumber: order.order_number,
+          itemCount: orderItemCount(order),
+          total: asNumber(order.total),
+          paidSales: paidOrderSales(order),
+          status: orderStatusLabel(order.status),
+        })),
+      };
+      sessionDetails.push(detail);
+      const day = localDate(session.opened_at);
+      const tableTrend = trendByTable.get(table.id) ?? new Map<string, { sessions: number; sales: number; additions: number }>();
+      const trend = tableTrend.get(day) ?? { sessions: 0, sales: 0, additions: 0 };
+      tableTrend.set(day, { sessions: trend.sessions + 1, sales: trend.sales + paidSales, additions: trend.additions + detail.additionalOrderCount });
+      trendByTable.set(table.id, tableTrend);
+      return detail;
+    });
+    const completedSessions = tableSessionDetails.filter((session) => session.closedAt);
+    const paidSales = tableSessionDetails.reduce((total, session) => total + session.paidSales, 0);
+    const totalDuration = completedSessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0);
+    const durationCount = completedSessions.filter((session) => session.durationMinutes !== null).length;
+    const firstUseAt = tableSessions[0]?.opened_at ?? null;
+    const lastUseAt = tableSessions[tableSessions.length - 1]?.opened_at ?? null;
+    const note =
+      tableSessionDetails.length === 0
+        ? table.is_active ? "لم تُستخدم خلال الفترة" : "طاولة معطلة"
+        : tableSessionDetails.some((session) => session.status === "نشطة")
+          ? "توجد جلسة نشطة"
+          : "جلسات مكتملة";
+
+    return {
+      tableId: table.id,
+      tableNumber: table.table_number,
+      tableLabel: tableLabel(table),
+      tableName: table.name,
+      tableStatus: tableStatusLabel(table.status, table.is_active),
+      sessionCount: tableSessionDetails.length,
+      completedSessionCount: completedSessions.length,
+      activeSessionCount: tableSessionDetails.filter((session) => session.status === "نشطة").length,
+      orderCount: tableSessionDetails.reduce((total, session) => total + session.orderCount, 0),
+      additionalOrderCount: tableSessionDetails.reduce((total, session) => total + session.additionalOrderCount, 0),
+      paidSales,
+      averageSessionValue: completedSessions.length > 0 ? paidSales / completedSessions.length : 0,
+      averageDurationMinutes: durationCount > 0 ? totalDuration / durationCount : null,
+      firstUseAt,
+      lastUseAt,
+      lastPreviousUseAt: previousUseByTable.get(table.id) ?? null,
+      note,
+    };
+  });
+
+  const usedRows = payloadRows.filter((row) => row.sessionCount > 0);
+  const activeUnusedRows = payloadRows.filter((row) => row.sessionCount === 0 && row.tableStatus !== "معطلة");
+  const totalPaidSales = payloadRows.reduce((total, row) => total + row.paidSales, 0);
+  const totalSessions = payloadRows.reduce((total, row) => total + row.sessionCount, 0);
+  const totalCompletedSessions = payloadRows.reduce((total, row) => total + row.completedSessionCount, 0);
+  const totalOrders = payloadRows.reduce((total, row) => total + row.orderCount, 0);
+  const totalAdditionalOrders = payloadRows.reduce((total, row) => total + row.additionalOrderCount, 0);
+  const durationValues = sessionDetails.map((session) => session.durationMinutes).filter((value): value is number => typeof value === "number");
+  const topUsage = [...usedRows].sort((first, second) => second.sessionCount - first.sessionCount || first.tableNumber - second.tableNumber)[0];
+  const topSales = [...usedRows].sort((first, second) => second.paidSales - first.paidSales || first.tableNumber - second.tableNumber)[0];
+
+  const rows: ReportTableRow[] = payloadRows
+    .sort((first, second) => first.tableNumber - second.tableNumber)
+    .map((row) => ({
+      tableId: row.tableId,
+      tableNumberRaw: row.tableNumber,
+      sessionCountRaw: row.sessionCount,
+      salesRaw: row.paidSales,
+      averageSessionValueRaw: row.averageSessionValue,
+      table: row.tableLabel,
+      name: row.tableName ?? "-",
+      sessions: row.sessionCount,
+      orders: row.orderCount,
+      additionalOrders: row.additionalOrderCount,
+      sales: formatCurrency(row.paidSales),
+      averageSessionValue: formatCurrency(row.averageSessionValue),
+      averageDuration: formatDuration(row.averageDurationMinutes),
+      firstUse: row.firstUseAt ? formatDateTime(row.firstUseAt) : "-",
+      lastUse: row.lastUseAt ? formatDateTime(row.lastUseAt) : "-",
+      status: `${row.tableStatus} / ${row.note}`,
+    }));
+
+  const unusedRows: ReportTableRow[] = activeUnusedRows.map((row) => ({
+    table: row.tableLabel,
+    status: row.tableStatus,
+    lastUse: row.lastPreviousUseAt ? formatDateTime(row.lastPreviousUseAt) : "لا يوجد استخدام سابق",
+  }));
+
+  const tableDetails = payloadRows.map((row) => {
+    const trend = [...(trendByTable.get(row.tableId) ?? new Map()).entries()].map(([date, value]) => ({
+      date,
+      sessions: value.sessions,
+      sales: formatCurrency(value.sales),
+      additionalOrders: value.additions,
+    }));
+    return {
+      ...row,
+      sessions: sessionDetails.filter((session) => session.tableId === row.tableId),
+      trend,
+    };
+  });
+
+  return makeReport(
+    "table_performance",
+    range,
+    {
+      "إجمالي مبيعات الطاولات": formatCurrency(totalPaidSales),
+      "إجمالي الجلسات": totalSessions,
+      "إجمالي الطلبات": totalOrders,
+      "إجمالي الطلبات الإضافية": totalAdditionalOrders,
+      "متوسط قيمة الجلسة": formatCurrency(totalCompletedSessions > 0 ? totalPaidSales / totalCompletedSessions : 0),
+      "متوسط مدة الجلسة": formatDuration(durationValues.length > 0 ? durationValues.reduce((total, value) => total + value, 0) / durationValues.length : null),
+      "أكثر طاولة استخداماً": topUsage?.tableLabel ?? "لا توجد بيانات",
+      "أعلى طاولة مبيعات": topSales?.tableLabel ?? "لا توجد بيانات",
+    },
+    [
+      { key: "table", label: "رقم الطاولة" },
+      { key: "name", label: "اسم الطاولة" },
+      { key: "sessions", label: "عدد الجلسات" },
+      { key: "orders", label: "عدد الطلبات" },
+      { key: "additionalOrders", label: "الطلبات الإضافية" },
+      { key: "sales", label: "إجمالي المبيعات" },
+      { key: "averageSessionValue", label: "متوسط قيمة الجلسة" },
+      { key: "averageDuration", label: "متوسط مدة الجلسة" },
+      { key: "firstUse", label: "أول استخدام بالفترة" },
+      { key: "lastUse", label: "آخر استخدام بالفترة" },
+      { key: "status", label: "الحالة / الملاحظة" },
+    ],
+    rows,
+    {
+      summaryRows: payloadRows,
+      tableDetails,
+      rankings: {
+        topPerformance: makeRankingRows(payloadRows, "sessions"),
+        topRevenue: makeRankingRows(payloadRows, "sales"),
+        lowUsage: makeLowUsageRows(payloadRows),
+        lowRevenue: makeLowestRevenueRows(payloadRows),
+        topAverage: makeRankingRows(payloadRows, "average"),
+        unused: unusedRows,
+      },
+      legacyOrdersWithoutSession: ((legacyOrders ?? []) as unknown[]).length,
+    },
+    [
+      "مبيعات الطاولة تعتمد على المدفوعات المكتملة فقط داخل جلسات الطاولات.",
+      "الطلبات القديمة غير المرتبطة بجلسة طاولة لا تدخل في مؤشرات الجلسات حتى لا يتم اختراع جلسات غير مؤكدة.",
+    ],
+    [
+      {
+        title: "أعلى الطاولات أداءً",
+        columns: [
+          { key: "rank", label: "الترتيب" },
+          { key: "table", label: "الطاولة" },
+          { key: "sessions", label: "عدد الجلسات" },
+          { key: "sales", label: "المبيعات" },
+        ],
+        rows: makeRankingRows(payloadRows, "sessions"),
+      },
+      {
+        title: "أعلى طاولة مبيعات",
+        columns: [
+          { key: "rank", label: "الترتيب" },
+          { key: "table", label: "الطاولة" },
+          { key: "sessions", label: "عدد الجلسات" },
+          { key: "sales", label: "المبيعات" },
+        ],
+        rows: makeRankingRows(payloadRows, "sales"),
+      },
+      {
+        title: "أقل الطاولات استخداماً",
+        columns: [
+          { key: "rank", label: "الترتيب" },
+          { key: "table", label: "الطاولة" },
+          { key: "sessions", label: "عدد الجلسات" },
+          { key: "sales", label: "المبيعات" },
+          { key: "status", label: "الحالة" },
+        ],
+        rows: makeLowUsageRows(payloadRows),
+      },
+      {
+        title: "أقل طاولة مبيعات",
+        columns: [
+          { key: "rank", label: "الترتيب" },
+          { key: "table", label: "الطاولة" },
+          { key: "sessions", label: "عدد الجلسات" },
+          { key: "sales", label: "المبيعات" },
+          { key: "status", label: "الحالة" },
+        ],
+        rows: makeLowestRevenueRows(payloadRows),
+      },
+      {
+        title: "طاولات لم تُستخدم خلال الفترة",
+        columns: [
+          { key: "table", label: "الطاولة" },
+          { key: "status", label: "الحالة" },
+          { key: "lastUse", label: "آخر استخدام سابق" },
+        ],
+        rows: unusedRows,
+      },
+    ],
+    tablePerformanceCalculationVersion,
+  );
+}
+
 export async function generateReport(reportType: ReportType, range: ReportRange): Promise<GeneratedReport> {
   if (reportType === "financial") return generateFinancialReport(range);
   if (reportType === "inventory") return generateInventoryReport(range);
   if (reportType === "material_consumption") return generateMaterialConsumptionReport(range);
   if (reportType === "waste") return generateWasteReport(range);
   if (reportType === "purchases") return generatePurchasesReport(range);
+  if (reportType === "table_performance") return generateTablePerformanceReport(range);
   return generateCashShiftReport(range);
 }
 
@@ -841,7 +1330,7 @@ export function snapshotToGeneratedReport(snapshot: ReportSnapshot): GeneratedRe
     rows: Array.isArray(payload.rows) ? (payload.rows as ReportTableRow[]) : [],
     sections: Array.isArray(payload.sections) ? (payload.sections as ReportSection[]) : [],
     payload,
-    calculationVersion,
+    calculationVersion: snapshot.calculationVersion,
     notes: Array.isArray(payload.notes) ? (payload.notes as string[]) : [],
   };
 }

@@ -4,55 +4,18 @@ import { BarChart3, Boxes, ClipboardList, CookingPot, LogOut, PackageCheck, Recy
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { ReactNode } from "react";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { OperationalToast } from "@/components/operational/OperationalToast";
-import type { OperationalToastState } from "@/components/operational/OperationalToast";
+import { useOperationalNotifications } from "@/components/operational/useOperationalNotifications";
 import { FullscreenButton } from "@/components/ui/FullscreenButton";
-import { createClient } from "@/lib/supabase/client";
 import { signOut } from "@/services/authService";
-import { getInventoryRequisitions } from "@/services/inventoryRequisitionService";
 import type { UserSession } from "@/types/auth";
-import type { InventoryRequisition, InventoryRequisitionDestination } from "@/types/inventory";
-
-const requisitionActionStatuses = new Set(["pending", "approved"]);
-const storekeeperRequisitionSound = "/sounds/new-order.mp3";
-const destinationLabels: Record<InventoryRequisitionDestination, string> = {
-  kitchen: "المطبخ",
-  barista: "الباريستا",
-  bar: "البار",
-  service: "الخدمة",
-  cleaning: "التنظيف",
-  management: "الإدارة",
-  other: "أخرى",
-};
-
-function materialSummary(requisition: InventoryRequisition) {
-  const names = requisition.items.map((item) => item.inventoryItemName).filter(Boolean);
-  if (names.length === 0) return "مواد جديدة";
-  if (names.length <= 3) return names.join("، ");
-  return `${names.slice(0, 3).join("، ")} +${names.length - 3}`;
-}
-
-function wasRequisitionNotified(id: string) {
-  if (typeof window === "undefined") return false;
-  return window.sessionStorage.getItem(`khatoun-storekeeper-requisition:${id}`) === "1";
-}
-
-function markRequisitionNotified(id: string) {
-  if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(`khatoun-storekeeper-requisition:${id}`, "1");
-}
 
 function InventoryShell({ session, children }: { session: UserSession; children: ReactNode }) {
   const searchParams = useSearchParams();
   const activeSection = searchParams.get("section") ?? "overview";
-  const [requisitionActionCount, setRequisitionActionCount] = useState(0);
-  const [toast, setToast] = useState<OperationalToastState | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const isAudioUnlockedRef = useRef(false);
-  const reloadTimerRef = useRef<number | null>(null);
-  const toastTimerRef = useRef<number | null>(null);
+  const notifications = useOperationalNotifications({ role: "storekeeper" });
   const navGroups = [
     {
       label: "الرئيسية",
@@ -92,131 +55,6 @@ function InventoryShell({ session, children }: { session: UserSession; children:
     await signOut();
     window.location.replace("/inventory/login");
   }
-
-  const unlockAudio = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio || isAudioUnlockedRef.current) return;
-
-    audio.muted = true;
-    void audio.play()
-      .then(() => {
-        audio.pause();
-        audio.currentTime = 0;
-        audio.muted = false;
-        isAudioUnlockedRef.current = true;
-      })
-      .catch(() => {
-        audio.muted = false;
-      });
-  }, []);
-
-  const playAlertSound = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio || !isAudioUnlockedRef.current) return;
-
-    audio.currentTime = 0;
-    void audio.play().catch(() => undefined);
-  }, []);
-
-  function showRequisitionToast(requisition: InventoryRequisition) {
-    const title = `طلب مواد جديد من ${destinationLabels[requisition.destination]}`;
-    const nextToast: OperationalToastState = {
-      id: `storekeeper-requisition:${requisition.id}:${Date.now()}`,
-      title,
-      tableLabel: requisition.requestCode,
-      message: isAudioUnlockedRef.current ? materialSummary(requisition) : `${materialSummary(requisition)} · اضغط مرة واحدة لتفعيل تنبيهات النظام`,
-      tone: "new",
-    };
-
-    setToast(nextToast);
-
-    if (toastTimerRef.current) {
-      window.clearTimeout(toastTimerRef.current);
-    }
-
-    toastTimerRef.current = window.setTimeout(() => setToast(null), 4200);
-  }
-
-  const loadRequisitionActionCount = useCallback(async (notifyRequisitionId?: string) => {
-    const requisitions = await getInventoryRequisitions();
-    setRequisitionActionCount(requisitions.filter((requisition) => requisitionActionStatuses.has(requisition.status)).length);
-
-    if (!notifyRequisitionId || wasRequisitionNotified(notifyRequisitionId)) {
-      return;
-    }
-
-    const requisition = requisitions.find((request) => request.id === notifyRequisitionId);
-    if (!requisition || requisition.status !== "pending") {
-      return;
-    }
-
-    markRequisitionNotified(requisition.id);
-    showRequisitionToast(requisition);
-    playAlertSound();
-  }, [playAlertSound]);
-
-  useEffect(() => {
-    audioRef.current = new Audio(storekeeperRequisitionSound);
-    audioRef.current.preload = "auto";
-
-    const unlock = () => unlockAudio();
-    window.addEventListener("pointerdown", unlock);
-    window.addEventListener("keydown", unlock);
-
-    const timer = window.setTimeout(() => {
-      void loadRequisitionActionCount().catch((error) => {
-        console.error("Failed to load inventory requisition badge", error);
-      });
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
-      audioRef.current = null;
-    };
-  }, [loadRequisitionActionCount, unlockAudio]);
-
-  useEffect(() => {
-    const supabase = createClient();
-
-    function scheduleReload(notifyRequisitionId?: string) {
-      if (reloadTimerRef.current) {
-        window.clearTimeout(reloadTimerRef.current);
-      }
-
-      reloadTimerRef.current = window.setTimeout(() => {
-        reloadTimerRef.current = null;
-        void loadRequisitionActionCount(notifyRequisitionId).catch((error) => {
-          console.error("Failed to refresh inventory requisition badge", error);
-        });
-      }, 600);
-    }
-
-    const channel = supabase
-      .channel("inventory-shell-requisition-alerts")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "inventory_requisitions" }, (payload) => {
-        const row = payload.new as { id?: string };
-        scheduleReload(row.id);
-      })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "inventory_requisitions" }, () => scheduleReload())
-      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_requisition_items" }, () => scheduleReload())
-      .subscribe();
-
-    return () => {
-      if (reloadTimerRef.current) {
-        window.clearTimeout(reloadTimerRef.current);
-        reloadTimerRef.current = null;
-      }
-
-      if (toastTimerRef.current) {
-        window.clearTimeout(toastTimerRef.current);
-        toastTimerRef.current = null;
-      }
-
-      void supabase.removeChannel(channel);
-    };
-  }, [loadRequisitionActionCount]);
 
   return (
     <div dir="rtl" className="management-shell min-h-screen overflow-x-hidden">
@@ -258,9 +96,9 @@ function InventoryShell({ session, children }: { session: UserSession; children:
               <Link key={item.id} href={item.href} className={`management-nav-link ${isActive ? "is-active" : ""}`}>
                 <Icon size={15} />
                 <span className="truncate">{item.label}</span>
-                {item.id === "requisitions" && requisitionActionCount > 0 ? (
+                {item.id === "requisitions" && notifications.badges.storekeeperRequisitions > 0 ? (
                   <span className={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold ${isActive ? "bg-white text-[#ff5656]" : "bg-[#ff5656] text-white"}`}>
-                    {requisitionActionCount}
+                    {notifications.badges.storekeeperRequisitions > 99 ? "99+" : notifications.badges.storekeeperRequisitions}
                   </span>
                 ) : null}
               </Link>
@@ -272,7 +110,7 @@ function InventoryShell({ session, children }: { session: UserSession; children:
       <div className="management-content w-full min-w-0 px-3 py-3 lg:px-4">
         <main className="min-w-0 overflow-x-hidden pb-8">{children}</main>
       </div>
-      <OperationalToast toast={toast} />
+      <OperationalToast toast={notifications.toast} />
     </div>
   );
 }

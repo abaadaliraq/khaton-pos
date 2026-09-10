@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, ReceiptText, Truck, WalletCards, X } from "lucide-react";
+import { Eye, ReceiptText, Search, Truck, WalletCards, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { PurchasePaymentVoucherDialog, purchasePaymentVoucherNumber } from "@/components/finance/PurchasePaymentVoucherDialog";
@@ -12,6 +12,8 @@ import type { PurchasePayment } from "@/types/finance";
 import { expensePaymentMethodLabels, purchasePaymentStatusLabels } from "@/types/finance";
 
 const baghdadTimeZone = "Asia/Baghdad";
+type SupplierStatusFilter = "all" | "active" | "inactive";
+type SupplierSortKey = "remaining" | "purchases" | "lastSupply";
 
 function formatDate(value: string | null) {
   if (!value) return "-";
@@ -29,6 +31,15 @@ function formatNumber(value: number) {
 
 function purchaseNumber(value: number) {
   return "PUR-" + String(value).padStart(6, "0");
+}
+
+function normalize(value: string | null | undefined) {
+  return (value ?? "").trim().toLocaleLowerCase("ar-IQ");
+}
+
+function lastSupplyTimestamp(supplier: AdminSupplierProfile) {
+  if (!supplier.financials.lastPurchaseAt) return 0;
+  return new Date(supplier.financials.lastPurchaseAt).getTime();
 }
 
 function StatCard({ title, value, icon: Icon }: { title: string; value: string; icon: typeof Truck }) {
@@ -181,30 +192,52 @@ function SupplierProfileDialog({ supplier, onClose, onOpenPayment }: { supplier:
   );
 }
 
-function SupplierCard({ supplier, onOpen }: { supplier: AdminSupplierProfile; onOpen: () => void }) {
+function SuppliersTable({ suppliers, onOpen }: { suppliers: AdminSupplierProfile[]; onOpen: (supplierId: string) => void }) {
   return (
-    <article className="rounded-md border border-[#e4d8c8] bg-white p-4 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-semibold text-[#2f211c]">{supplier.name}</h2>
-            <StatusBadge active={supplier.isActive} />
-          </div>
-          <p className="mt-1 text-sm text-[#7c6b60]">{supplier.phone ?? "لا يوجد هاتف"}</p>
+    <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
+      <div className="border-b border-[#eee4d8] p-4">
+        <h2 className="font-semibold text-[#2f211c]">قائمة الموردين</h2>
+      </div>
+      {suppliers.length === 0 ? <div className="p-4"><EmptyState message="لا توجد سجلات موردين مطابقة للفلاتر الحالية." /></div> : null}
+      {suppliers.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1180px] border-collapse text-right text-sm">
+            <thead className="bg-[#f5eee6] text-[#4a3b34]">
+              <tr className="[&>th]:border-l [&>th]:border-[#e4d8c8] last:[&>th]:border-l-0">
+                <th className="px-3 py-3 font-semibold">اسم المورد</th>
+                <th className="px-3 py-3 font-semibold">الهاتف</th>
+                <th className="px-3 py-3 font-semibold">عدد الفواتير</th>
+                <th className="px-3 py-3 font-semibold">إجمالي المشتريات</th>
+                <th className="px-3 py-3 font-semibold">المدفوع</th>
+                <th className="px-3 py-3 font-semibold">المستحق</th>
+                <th className="px-3 py-3 font-semibold">آخر توريد</th>
+                <th className="px-3 py-3 font-semibold">الحالة</th>
+                <th className="px-3 py-3 font-semibold">عرض الملف</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#eee4d8]">
+              {suppliers.map((supplier) => (
+                <tr key={supplier.id} className="hover:bg-[#fffaf4] [&>td]:border-l [&>td]:border-[#f0e4d6] last:[&>td]:border-l-0">
+                  <td className="max-w-[240px] whitespace-normal px-3 py-3 font-semibold leading-6 text-[#2f211c]">{supplier.name}</td>
+                  <td className="px-3 py-3 text-[#4a3b34]">{supplier.phone ?? "-"}</td>
+                  <td className="px-3 py-3 font-semibold text-[#5d4032]">{formatNumber(supplier.financials.purchaseCount)}</td>
+                  <td className="px-3 py-3 font-semibold text-[#2f211c]">{formatCurrency(supplier.financials.totalPurchases)}</td>
+                  <td className="px-3 py-3 font-semibold text-emerald-700">{formatCurrency(supplier.financials.totalPaid)}</td>
+                  <td className="px-3 py-3 font-semibold text-[#9f3128]">{formatCurrency(supplier.financials.remaining)}</td>
+                  <td className="px-3 py-3 text-[#4a3b34]">{formatDate(supplier.financials.lastPurchaseAt)}</td>
+                  <td className="px-3 py-3"><StatusBadge active={supplier.isActive} /></td>
+                  <td className="px-3 py-3">
+                    <button type="button" onClick={() => onOpen(supplier.id)} className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#e4d8c8] bg-white px-3 text-sm font-semibold text-[#4a3b34] hover:bg-[#f5eee6]">
+                      <Eye size={16} />عرض
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <button type="button" onClick={onOpen} className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#e4d8c8] px-3 text-sm text-[#4a3b34] hover:bg-[#f5eee6]">
-          <Eye size={16} />عرض الملف
-        </button>
-      </div>
-      <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
-        <DetailLine label="عدد الفواتير" value={formatNumber(supplier.financials.purchaseCount)} />
-        <DetailLine label="إجمالي المشتريات" value={formatCurrency(supplier.financials.totalPurchases)} />
-        <DetailLine label="المدفوع" value={formatCurrency(supplier.financials.totalPaid)} />
-        <DetailLine label="المتبقي" value={formatCurrency(supplier.financials.remaining)} />
-        <DetailLine label="آخر توريد" value={formatDate(supplier.financials.lastPurchaseAt)} />
-        <DetailLine label="الحالة" value={supplier.isActive ? "فعال" : "متوقف"} />
-      </div>
-    </article>
+      ) : null}
+    </section>
   );
 }
 
@@ -214,6 +247,9 @@ export default function OwnerSuppliersPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   const [selectedPayment, setSelectedPayment] = useState<PurchasePayment | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<SupplierStatusFilter>("all");
+  const [sortKey, setSortKey] = useState<SupplierSortKey>("remaining");
 
   useEffect(() => {
     let isMounted = true;
@@ -250,6 +286,21 @@ export default function OwnerSuppliersPage() {
 
   const selectedSupplier = selectedSupplierId ? suppliers.find((supplier) => supplier.id === selectedSupplierId) ?? null : null;
 
+  const filteredSuppliers = useMemo(() => {
+    const query = normalize(search);
+    return suppliers
+      .filter((supplier) => {
+        const matchesSearch = !query || normalize(supplier.name).includes(query) || normalize(supplier.phone).includes(query);
+        const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? supplier.isActive : !supplier.isActive);
+        return matchesSearch && matchesStatus;
+      })
+      .toSorted((first, second) => {
+        if (sortKey === "purchases") return second.financials.totalPurchases - first.financials.totalPurchases;
+        if (sortKey === "lastSupply") return lastSupplyTimestamp(second) - lastSupplyTimestamp(first);
+        return second.financials.remaining - first.financials.remaining;
+      });
+  }, [search, sortKey, statusFilter, suppliers]);
+
   return (
     <div className="space-y-5">
       <section className="rounded-md border border-[#e4d8c8] bg-white p-5 shadow-sm">
@@ -273,11 +324,39 @@ export default function OwnerSuppliersPage() {
 
           {suppliers.length === 0 ? <EmptyState message="لا توجد بيانات موردين حالياً." /> : null}
 
-          <section className="grid gap-4 xl:grid-cols-2">
-            {suppliers.map((supplier) => (
-              <SupplierCard key={supplier.id} supplier={supplier} onOpen={() => setSelectedSupplierId(supplier.id)} />
-            ))}
+          <section className="rounded-md border border-[#e4d8c8] bg-white p-4 shadow-sm">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_200px_240px]">
+              <label className="relative block">
+                <Search className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#9a8779]" size={18} />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="بحث باسم المورد أو الهاتف"
+                  className="h-11 w-full rounded-md border border-[#e4d8c8] bg-[#fbfaf7] pr-10 pl-3 text-sm text-[#2f211c] outline-none focus:border-[#a65f3f]"
+                />
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as SupplierStatusFilter)}
+                className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 text-sm text-[#2f211c] outline-none focus:border-[#a65f3f]"
+              >
+                <option value="all">كل الحالات</option>
+                <option value="active">فعال</option>
+                <option value="inactive">متوقف</option>
+              </select>
+              <select
+                value={sortKey}
+                onChange={(event) => setSortKey(event.target.value as SupplierSortKey)}
+                className="h-11 rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-3 text-sm text-[#2f211c] outline-none focus:border-[#a65f3f]"
+              >
+                <option value="remaining">ترتيب حسب المستحقات</option>
+                <option value="purchases">ترتيب حسب المشتريات</option>
+                <option value="lastSupply">ترتيب حسب آخر توريد</option>
+              </select>
+            </div>
           </section>
+
+          <SuppliersTable suppliers={filteredSuppliers} onOpen={setSelectedSupplierId} />
         </>
       )}
 

@@ -1,8 +1,8 @@
 import type { CashShift, ExpensePaymentMethod, PurchasePaymentStatus } from "@/types/finance";
 import type { InventoryItemType, InventoryRequisitionDestination, InventoryUnitCode, InventoryWasteContext, InventoryWasteReason } from "@/types/inventory";
 
-export type ReportType = "financial" | "inventory" | "material_consumption" | "waste" | "purchases" | "cash_shifts";
-export type ReportPeriodType = "daily" | "weekly" | "monthly" | "custom";
+export type ReportType = "financial" | "inventory" | "material_consumption" | "waste" | "purchases" | "cash_shifts" | "table_performance";
+export type ReportPeriodType = "daily" | "weekly" | "monthly" | "yearly" | "custom";
 
 export type ReportRange = {
   periodType: ReportPeriodType;
@@ -39,7 +39,7 @@ export type GeneratedReport = {
   rows: ReportTableRow[];
   sections: ReportSection[];
   payload: Record<string, unknown>;
-  calculationVersion: "reports_phase_1_v1";
+  calculationVersion: string;
   notes: string[];
 };
 

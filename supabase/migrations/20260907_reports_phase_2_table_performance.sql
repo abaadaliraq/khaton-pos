@@ -1,0 +1,112 @@
+alter table public.report_snapshots
+  drop constraint if exists report_snapshots_report_type_check;
+
+alter table public.report_snapshots
+  add constraint report_snapshots_report_type_check
+  check (report_type in ('financial', 'inventory', 'material_consumption', 'waste', 'purchases', 'cash_shifts', 'table_performance'));
+
+alter table public.report_snapshots
+  drop constraint if exists report_snapshots_period_type_check;
+
+alter table public.report_snapshots
+  add constraint report_snapshots_period_type_check
+  check (period_type in ('daily', 'weekly', 'monthly', 'yearly', 'custom'));
+
+create or replace function public.create_report_snapshot(
+  p_report_type text,
+  p_period_type text,
+  p_period_start date,
+  p_period_end date,
+  p_summary jsonb,
+  p_payload jsonb,
+  p_business_timezone text default 'Asia/Baghdad',
+  p_schema_version integer default 1,
+  p_calculation_version text default 'reports_phase_1_v1'
+)
+returns public.report_snapshots
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  requester_role text := public.current_user_role();
+  next_version integer;
+  created_snapshot public.report_snapshots%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication is required to save report snapshots';
+  end if;
+
+  if requester_role not in ('admin', 'owner') then
+    raise exception 'Only admin or owner users can save report snapshots';
+  end if;
+
+  if p_report_type not in ('financial', 'inventory', 'material_consumption', 'waste', 'purchases', 'cash_shifts', 'table_performance') then
+    raise exception 'Unsupported report type';
+  end if;
+
+  if p_period_type not in ('daily', 'weekly', 'monthly', 'yearly', 'custom') then
+    raise exception 'Unsupported period type';
+  end if;
+
+  if p_period_start is null or p_period_end is null or p_period_start > p_period_end then
+    raise exception 'Invalid report period';
+  end if;
+
+  lock table public.report_snapshots in exclusive mode;
+
+  select coalesce(max(version), 0) + 1
+    into next_version
+  from public.report_snapshots
+  where report_type = p_report_type
+    and period_type = p_period_type
+    and period_start = p_period_start
+    and period_end = p_period_end;
+
+  insert into public.report_snapshots (
+    report_type,
+    period_type,
+    period_start,
+    period_end,
+    business_timezone,
+    generated_by,
+    version,
+    schema_version,
+    calculation_version,
+    summary,
+    payload
+  ) values (
+    p_report_type,
+    p_period_type,
+    p_period_start,
+    p_period_end,
+    coalesce(nullif(btrim(p_business_timezone), ''), 'Asia/Baghdad'),
+    auth.uid(),
+    next_version,
+    coalesce(p_schema_version, 1),
+    coalesce(nullif(btrim(p_calculation_version), ''), 'reports_phase_1_v1'),
+    coalesce(p_summary, '{}'::jsonb),
+    coalesce(p_payload, '{}'::jsonb)
+  ) returning * into created_snapshot;
+
+  perform public.write_audit_log(
+    'report_snapshot_created',
+    'report_snapshots',
+    created_snapshot.id,
+    null,
+    jsonb_build_object(
+      'report_reference', created_snapshot.report_reference,
+      'report_type', created_snapshot.report_type,
+      'period_type', created_snapshot.period_type,
+      'period_start', created_snapshot.period_start,
+      'period_end', created_snapshot.period_end,
+      'version', created_snapshot.version
+    )
+  );
+
+  return created_snapshot;
+end;
+$$;
+
+revoke all on function public.create_report_snapshot(text, text, date, date, jsonb, jsonb, text, integer, text) from public;
+grant execute on function public.create_report_snapshot(text, text, date, date, jsonb, jsonb, text, integer, text) to authenticated;

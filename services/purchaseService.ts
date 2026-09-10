@@ -12,6 +12,8 @@ import type {
   PurchaseItem,
   PurchasePayment,
   PurchasePaymentStatus,
+  PurchaseReceivingHistoryEntry,
+  PurchaseRequestItemDecisionInput,
   PurchaseRequest,
   PurchaseRequestItem,
   PurchaseRequestStatus,
@@ -36,9 +38,14 @@ type PurchaseRequestItemRow = {
   id: string;
   inventory_item_id: string;
   quantity: number | string;
+  received_quantity: number | string;
+  decision_status: PurchaseRequestItem["decisionStatus"];
+  decision_by_profile: ProfileNameRow | null;
+  decision_at: string | null;
+  rejection_reason: string | null;
   unit_id: string;
   notes: string | null;
-  inventory_item: { name_ar: string } | null;
+  inventory_item: { name_ar: string; stock_on_hand: number | string; minimum_stock: number | string; last_purchase_cost: number | string } | null;
   unit: { code: string } | null;
 };
 
@@ -48,6 +55,7 @@ type PurchaseRequestRow = {
   status: PurchaseRequestStatus;
   notes: string | null;
   decision_notes: string | null;
+  rejection_reason: string | null;
   requested_by: string;
   requested_by_profile: ProfileNameRow | null;
   decided_by: string | null;
@@ -114,13 +122,41 @@ type PurchasePaymentRow = {
   } | null;
 };
 
+type PurchaseRequestItemContext = {
+  stockOnHand?: number;
+  minimumStock?: number;
+  lastPurchaseCost?: number;
+  lastSupplierName?: string | null;
+  receivingHistory?: PurchaseReceivingHistoryEntry[];
+};
+
+type LastSupplierRow = {
+  inventory_item_id: string;
+  purchase: { created_at: string; supplier: { name: string } | null } | null;
+};
+
+type PurchaseRequestReceiptRow = {
+  id: string;
+  purchase_number: number;
+  purchase_request_id: string | null;
+  created_at: string;
+  created_by_profile: ProfileNameRow | null;
+  purchase_items: Array<{
+    id: string;
+    inventory_item_id: string;
+    quantity: number | string;
+    unit_id: string;
+    unit: { code: string } | null;
+  }> | null;
+};
+
 const profileNameSelect = "full_name, username";
 const supplierSelect = "id, name, phone, address, notes, is_active, created_by, created_at, updated_at";
-const requestSelect = `id, request_number, status, notes, decision_notes, requested_by, decided_by, decided_at, received_by, received_at, created_at, updated_at,
+const requestSelect = `id, request_number, status, notes, decision_notes, rejection_reason, requested_by, decided_by, decided_at, received_by, received_at, created_at, updated_at,
   requested_by_profile:profiles!purchase_requests_requested_by_fkey(${profileNameSelect}),
   decided_by_profile:profiles!purchase_requests_decided_by_fkey(${profileNameSelect}),
   received_by_profile:profiles!purchase_requests_received_by_fkey(${profileNameSelect}),
-  purchase_request_items(id, inventory_item_id, quantity, unit_id, notes, inventory_item:inventory_items!purchase_request_items_inventory_item_id_fkey(name_ar), unit:inventory_units!purchase_request_items_unit_id_fkey(code))`;
+  purchase_request_items(id, inventory_item_id, quantity, received_quantity, decision_status, decision_at, rejection_reason, unit_id, notes, decision_by_profile:profiles!purchase_request_items_decision_by_fkey(${profileNameSelect}), inventory_item:inventory_items!purchase_request_items_inventory_item_id_fkey(name_ar, stock_on_hand, minimum_stock, last_purchase_cost), unit:inventory_units!purchase_request_items_unit_id_fkey(code))`;
 const purchaseSelect = `id, purchase_number, purchase_request_id, supplier_id, supplier_invoice_number, supplier_invoice_date, total_amount, payment_status, notes, created_by, created_at,
   purchase_request:purchase_requests!purchases_purchase_request_id_fkey(request_number),
   supplier:suppliers!purchases_supplier_id_fkey(name),
@@ -129,6 +165,9 @@ const purchaseSelect = `id, purchase_number, purchase_request_id, supplier_id, s
 const paymentSelect = `id, payment_number, purchase_id, amount, payment_method, reference_number, notes, paid_by, created_at,
   paid_by_profile:profiles!purchase_payments_paid_by_fkey(${profileNameSelect}),
   purchase:purchases!purchase_payments_purchase_id_fkey(purchase_number, supplier_invoice_number, supplier_invoice_date, created_at, notes, supplier:suppliers!purchases_supplier_id_fkey(name), created_by_profile:profiles!purchases_created_by_fkey(${profileNameSelect}))`;
+const requestReceiptSelect = `id, purchase_number, purchase_request_id, created_at,
+  created_by_profile:profiles!purchases_created_by_fkey(${profileNameSelect}),
+  purchase_items(id, inventory_item_id, quantity, unit_id, unit:inventory_units!purchase_items_unit_id_fkey(code))`;
 
 function clean(value: string | undefined) {
   const trimmed = value?.trim() ?? "";
@@ -142,6 +181,15 @@ function asNumber(value: number | string) {
 
 function profileName(profile: ProfileNameRow | null) {
   return profile?.full_name ?? profile?.username ?? "مستخدم غير معروف";
+}
+
+function displayUnit(code: string | null | undefined) {
+  if (code === "piece") return "قطعة";
+  if (code === "kg") return "كغم";
+  if (code === "g") return "غرام";
+  if (code === "l") return "لتر";
+  if (code === "ml") return "مل";
+  return code ?? "-";
 }
 
 function rowToSupplier(row: SupplierRow): Supplier {
@@ -158,25 +206,43 @@ function rowToSupplier(row: SupplierRow): Supplier {
   };
 }
 
-function rowToRequestItem(row: PurchaseRequestItemRow): PurchaseRequestItem {
+function rowToRequestItem(row: PurchaseRequestItemRow, context?: PurchaseRequestItemContext): PurchaseRequestItem {
+  const quantity = asNumber(row.quantity);
+  const receivedQuantity = Math.min(quantity, asNumber(row.received_quantity));
+  const remainingQuantity = Math.max(quantity - receivedQuantity, 0);
+  const receivingStatus = receivedQuantity <= 0 ? "pending_receipt" : remainingQuantity <= 0 ? "received" : "partially_received";
+
   return {
     id: row.id,
     inventoryItemId: row.inventory_item_id,
     inventoryItemName: row.inventory_item?.name_ar ?? "مادة غير معروفة",
-    quantity: asNumber(row.quantity),
+    quantity,
+    receivedQuantity,
+    remainingQuantity,
     unitId: row.unit_id,
-    unitCode: row.unit?.code ?? "-",
+    unitCode: displayUnit(row.unit?.code),
+    receivingStatus,
+    receivingHistory: context?.receivingHistory ?? [],
+    decisionStatus: row.decision_status ?? "pending",
+    decisionByName: row.decision_by_profile ? profileName(row.decision_by_profile) : null,
+    decisionAt: row.decision_at,
+    rejectionReason: row.rejection_reason,
+    stockOnHand: context?.stockOnHand ?? (row.inventory_item ? asNumber(row.inventory_item.stock_on_hand) : undefined),
+    minimumStock: context?.minimumStock ?? (row.inventory_item ? asNumber(row.inventory_item.minimum_stock) : undefined),
+    lastPurchaseCost: context?.lastPurchaseCost ?? (row.inventory_item ? asNumber(row.inventory_item.last_purchase_cost) : undefined),
+    lastSupplierName: context?.lastSupplierName,
     notes: row.notes,
   };
 }
 
-function rowToPurchaseRequest(row: PurchaseRequestRow): PurchaseRequest {
+function rowToPurchaseRequest(row: PurchaseRequestRow, contextByItemId = new Map<string, PurchaseRequestItemContext>()): PurchaseRequest {
   return {
     id: row.id,
     requestNumber: row.request_number,
     status: row.status,
     notes: row.notes,
     decisionNotes: row.decision_notes,
+    rejectionReason: row.rejection_reason ?? row.decision_notes,
     requestedBy: row.requested_by,
     requestedByName: profileName(row.requested_by_profile),
     decidedBy: row.decided_by,
@@ -187,7 +253,7 @@ function rowToPurchaseRequest(row: PurchaseRequestRow): PurchaseRequest {
     receivedAt: row.received_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    items: (row.purchase_request_items ?? []).map(rowToRequestItem),
+    items: (row.purchase_request_items ?? []).map((item) => rowToRequestItem(item, contextByItemId.get(item.id))),
   };
 }
 
@@ -198,7 +264,7 @@ function rowToPurchaseItem(row: PurchaseItemRow): PurchaseItem {
     inventoryItemName: row.inventory_item?.name_ar ?? "مادة غير معروفة",
     quantity: asNumber(row.quantity),
     unitId: row.unit_id,
-    unitCode: row.unit?.code ?? "-",
+    unitCode: displayUnit(row.unit?.code),
     unitPrice: asNumber(row.unit_price),
     lineTotal: asNumber(row.line_total),
     quantityBase: asNumber(row.quantity_base),
@@ -245,6 +311,102 @@ function rowToPayment(row: PurchasePaymentRow): PurchasePayment {
     paidByName: profileName(row.paid_by_profile),
     createdAt: row.created_at,
   };
+}
+
+async function loadPurchaseRequestItemContext(rows: PurchaseRequestRow[]) {
+  const itemIds = Array.from(new Set(rows.flatMap((row) => (row.purchase_request_items ?? []).map((item) => item.inventory_item_id))));
+  const requestIds = rows.map((row) => row.id);
+  const contextByItemId = new Map<string, PurchaseRequestItemContext>();
+  for (const row of rows) {
+    for (const item of row.purchase_request_items ?? []) {
+      contextByItemId.set(item.id, {
+        stockOnHand: item.inventory_item ? asNumber(item.inventory_item.stock_on_hand) : undefined,
+        minimumStock: item.inventory_item ? asNumber(item.inventory_item.minimum_stock) : undefined,
+        lastPurchaseCost: item.inventory_item ? asNumber(item.inventory_item.last_purchase_cost) : undefined,
+        lastSupplierName: null,
+      });
+    }
+  }
+
+  if (itemIds.length === 0) return contextByItemId;
+
+  const supabase = createClient();
+  const [{ data, error }, { data: receiptData, error: receiptError }] = await Promise.all([
+    supabase
+    .from("purchase_items" as never)
+    .select("inventory_item_id, purchase:purchases!purchase_items_purchase_id_fkey(created_at, supplier:suppliers!purchases_supplier_id_fkey(name))")
+      .in("inventory_item_id" as never, itemIds as never),
+    requestIds.length > 0
+      ? supabase
+        .from("purchases" as never)
+        .select(requestReceiptSelect)
+        .in("purchase_request_id" as never, requestIds as never)
+        .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (error) {
+    logSupabaseError("[purchase request item context SELECT]", error);
+  }
+
+  if (!error) {
+    const rowsByNewestPurchase = ((data ?? []) as unknown as LastSupplierRow[]).sort((first, second) => {
+      const firstDate = first.purchase?.created_at ? Date.parse(first.purchase.created_at) : 0;
+      const secondDate = second.purchase?.created_at ? Date.parse(second.purchase.created_at) : 0;
+      return secondDate - firstDate;
+    });
+
+    for (const row of rowsByNewestPurchase) {
+      for (const requestRow of rows) {
+        for (const item of requestRow.purchase_request_items ?? []) {
+          if (item.inventory_item_id !== row.inventory_item_id) continue;
+          const current = contextByItemId.get(item.id);
+          if (!current || current.lastSupplierName) continue;
+          contextByItemId.set(item.id, { ...current, lastSupplierName: row.purchase?.supplier?.name ?? null });
+        }
+      }
+    }
+  }
+
+  if (receiptError) {
+    logSupabaseError("[purchase request receipt history SELECT]", receiptError);
+    return contextByItemId;
+  }
+
+  const requestItemByKey = new Map<string, PurchaseRequestItemRow>();
+  for (const row of rows) {
+    for (const item of row.purchase_request_items ?? []) {
+      requestItemByKey.set(`${row.id}:${item.inventory_item_id}:${item.unit_id}`, item);
+    }
+  }
+
+  for (const receipt of (receiptData ?? []) as unknown as PurchaseRequestReceiptRow[]) {
+    if (!receipt.purchase_request_id) continue;
+    for (const item of receipt.purchase_items ?? []) {
+      const requestItem = requestItemByKey.get(`${receipt.purchase_request_id}:${item.inventory_item_id}:${item.unit_id}`);
+      if (!requestItem) continue;
+      const current = contextByItemId.get(requestItem.id) ?? {};
+      const nextHistory = current.receivingHistory ?? [];
+      contextByItemId.set(requestItem.id, {
+        ...current,
+        receivingHistory: [
+          ...nextHistory,
+          {
+            id: item.id,
+            purchaseId: receipt.id,
+            purchaseNumber: receipt.purchase_number,
+            quantity: asNumber(item.quantity),
+            unitCode: displayUnit(item.unit?.code),
+            receivedBy: profileName(receipt.created_by_profile),
+            receivedAt: receipt.created_at,
+            reference: `PUR-${String(receipt.purchase_number).padStart(6, "0")}`,
+          },
+        ],
+      });
+    }
+  }
+
+  return contextByItemId;
 }
 
 export async function getSuppliers() {
@@ -297,7 +459,9 @@ export async function getPurchaseRequests() {
     throw error;
   }
 
-  return ((data ?? []) as unknown as PurchaseRequestRow[]).map(rowToPurchaseRequest);
+  const rows = (data ?? []) as unknown as PurchaseRequestRow[];
+  const contextByItemId = await loadPurchaseRequestItemContext(rows);
+  return rows.map((row) => rowToPurchaseRequest(row, contextByItemId));
 }
 
 export async function getPurchaseRequestById(id: string) {
@@ -313,7 +477,10 @@ export async function getPurchaseRequestById(id: string) {
     throw error;
   }
 
-  return data ? rowToPurchaseRequest(data as unknown as PurchaseRequestRow) : null;
+  if (!data) return null;
+  const row = data as unknown as PurchaseRequestRow;
+  const contextByItemId = await loadPurchaseRequestItemContext([row]);
+  return rowToPurchaseRequest(row, contextByItemId);
 }
 
 export async function createPurchaseRequest(input: CreatePurchaseRequestInput) {
@@ -346,7 +513,7 @@ export async function decidePurchaseRequest(input: PurchaseDecisionInput) {
   const { error } = await supabase.rpc("decide_purchase_request" as never, {
     p_purchase_request_id: input.requestId,
     p_decision: input.decision,
-    p_decision_notes: clean(input.decisionNotes),
+    p_decision_notes: clean(input.decision === "rejected" ? input.rejectionReason ?? input.decisionNotes : input.decisionNotes),
   } as never);
 
   if (error) {
@@ -356,6 +523,27 @@ export async function decidePurchaseRequest(input: PurchaseDecisionInput) {
 
   const request = await getPurchaseRequestById(input.requestId);
   if (!request) throw new Error("لم يتم العثور على طلب الشراء بعد القرار");
+  return request;
+}
+
+export async function decidePurchaseRequestItem(input: PurchaseRequestItemDecisionInput) {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("decide_purchase_request_item" as never, {
+    p_purchase_request_item_id: input.requestItemId,
+    p_decision: input.decision,
+    p_rejection_reason: clean(input.rejectionReason),
+  } as never);
+
+  if (error) {
+    logSupabaseError("[purchase request item decide RPC decide_purchase_request_item]", error);
+    throw error;
+  }
+
+  const id = (data as { id?: string } | null)?.id;
+  if (!id) throw new Error("لم يرجع Supabase معرف طلب الشراء بعد قرار المادة");
+
+  const request = await getPurchaseRequestById(id);
+  if (!request) throw new Error("لم يتم العثور على طلب الشراء بعد قرار المادة");
   return request;
 }
 
@@ -444,6 +632,7 @@ export async function payPurchase(input: PayPurchaseInput) {
     p_payment_method: input.paymentMethod,
     p_reference_number: clean(input.referenceNumber),
     p_notes: clean(input.notes),
+    p_cash_shift_id: input.cashShiftId ?? null,
   } as never);
 
   if (error) {

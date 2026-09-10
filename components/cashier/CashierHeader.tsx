@@ -11,6 +11,7 @@ type CashierHeaderProps = {
   session: UserSession;
   soundEnabled: boolean;
   soundNeedsActivation: boolean;
+  awaitingPaymentCount: number;
   onToggleSound: () => void;
   onOpenShiftSummary: () => void;
 };
@@ -25,7 +26,7 @@ function getTime() {
   }).format(new Date());
 }
 
-export function CashierHeader({ session, soundEnabled, soundNeedsActivation, onToggleSound, onOpenShiftSummary }: CashierHeaderProps) {
+export function CashierHeader({ session, soundEnabled, soundNeedsActivation, awaitingPaymentCount, onToggleSound, onOpenShiftSummary }: CashierHeaderProps) {
   const router = useRouter();
   const [time, setTime] = useState("");
 
@@ -60,6 +61,12 @@ export function CashierHeader({ session, soundEnabled, soundNeedsActivation, onT
           <span className="h-10 rounded-lg border border-[#3B8F8B]/25 bg-[#3B8F8B]/10 px-3 py-2 text-sm font-medium text-[#2f7470]">
             الوردية مفتوحة
           </span>
+          {awaitingPaymentCount > 0 ? (
+            <span className="flex h-10 items-center gap-2 rounded-lg border border-[#ff5656]/25 bg-[#ff5656]/10 px-3 py-2 text-sm font-bold text-[#7B3F32]">
+              بانتظار الدفع
+              <span className="rounded-full bg-[#ff5656] px-2 py-0.5 text-xs text-white">{awaitingPaymentCount > 99 ? "99+" : awaitingPaymentCount}</span>
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={onToggleSound}
