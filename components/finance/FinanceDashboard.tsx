@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Banknote, CheckCircle2, Clock3, Eye, Landmark, ReceiptText, Save, TrendingDown, TrendingUp, WalletCards, XCircle } from "lucide-react";
+import { AlertTriangle, Banknote, CheckCircle2, Clock3, Eye, HandCoins, Landmark, ReceiptText, Save, TrendingDown, TrendingUp, WalletCards, XCircle } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExpenseVoucherDialog, expenseVoucherNumber } from "@/components/finance/ExpenseVoucherDialog";
 import { OperationalToast } from "@/components/operational/OperationalToast";
@@ -11,9 +11,9 @@ import { formatCurrency } from "@/lib/formatCurrency";
 import { purchaseRequestCode, purchaseRequestItemsSummary, singlePurchaseRequestItemName, singlePurchaseRequestQuantity } from "@/lib/purchaseRequestDisplay";
 import { createClient } from "@/lib/supabase/client";
 import { logSupabaseError } from "@/lib/supabaseError";
-import { createExpense, getCashierOptions, getCashShiftMovements, getExpectedCashForShift, getExpenses, getFinanceSalesSummary, getOpenCashShifts, getRecentCashShifts } from "@/services/financeService";
+import { createExpense, getCashierOptions, getCashShiftMovements, getExpectedCashForShift, getExpenses, getFinanceSalesSummary, getOpenCashShifts, getRecentCashShifts, getTipsSummary } from "@/services/financeService";
 import { decidePurchaseRequestItem, getPurchasePayments, getPurchaseRequests, getPurchases, payPurchase } from "@/services/purchaseService";
-import type { CashierOption, CashShift, CashShiftMovement, CreateExpenseInput, CustomerPayment, ExpectedCashBreakdown, Expense, ExpenseCategory, ExpensePaymentMethod, FinanceSalesSummary, PayPurchaseInput, Purchase, PurchasePayment, PurchaseRequest } from "@/types/finance";
+import type { CashierOption, CashShift, CashShiftMovement, CreateExpenseInput, CustomerPayment, ExpectedCashBreakdown, Expense, ExpenseCategory, ExpensePaymentMethod, FinanceSalesSummary, PayPurchaseInput, Purchase, PurchasePayment, PurchaseRequest, TipsSummary } from "@/types/finance";
 import { expenseCategoryLabels, expensePaymentMethodLabels, purchasePaymentStatusLabels, purchaseRequestItemDecisionStatusLabels, purchaseRequestStatusLabels } from "@/types/finance";
 
 type FinanceTab = "overview" | "requests" | "invoices" | "expenses" | "payments";
@@ -219,7 +219,7 @@ function KpiCard({ card }: { card: FinanceKpi }) {
   );
 }
 
-function CashBoxCard({ cashIn, cashExpenses, cashSupplierPayments, cashNet }: { cashIn: number; cashExpenses: number; cashSupplierPayments: number; cashNet: number }) {
+function CashBoxCard({ cashIn, cashTips, cashExpenses, cashSupplierPayments, cashNet }: { cashIn: number; cashTips: number; cashExpenses: number; cashSupplierPayments: number; cashNet: number }) {
   const outgoing = cashExpenses + cashSupplierPayments;
 
   return (
@@ -233,8 +233,12 @@ function CashBoxCard({ cashIn, cashExpenses, cashSupplierPayments, cashNet }: { 
       </div>
       <div className="mt-5 grid gap-3">
         <div className="flex items-center justify-between rounded-md bg-white/[0.04] px-3 py-3">
-          <span className="text-sm text-zinc-300">داخل الوردية</span>
+          <span className="text-sm text-zinc-300">مبيعات نقدية</span>
           <span className="font-semibold text-emerald-300">+ {formatCurrency(cashIn)}</span>
+        </div>
+        <div className="flex items-center justify-between rounded-md bg-white/[0.04] px-3 py-3">
+          <span className="text-sm text-zinc-300">Tips نقدية</span>
+          <span className="font-semibold text-emerald-300">+ {formatCurrency(cashTips)}</span>
         </div>
         <div className="flex items-center justify-between rounded-md bg-white/[0.04] px-3 py-3">
           <span className="text-sm text-zinc-300">خارج الوردية</span>
@@ -245,7 +249,7 @@ function CashBoxCard({ cashIn, cashExpenses, cashSupplierPayments, cashNet }: { 
           <span className="font-semibold text-white">{formatCurrency(cashNet)}</span>
         </div>
       </div>
-      <p className="mt-4 text-xs leading-5 text-zinc-400">يمثل حركة الوردية المفتوحة حسب سجلات الصندوق.</p>
+      <p className="mt-4 text-xs leading-5 text-zinc-400">يمثل حركة الوردية المفتوحة مع فصل البقشيش عن المبيعات.</p>
     </section>
   );
 }
@@ -329,6 +333,54 @@ function FinanceAlerts({ alerts }: { alerts: FinanceAlert[] }) {
   );
 }
 
+function TipsOverview({ tipsSummary }: { tipsSummary: TipsSummary }) {
+  return (
+    <section className="overflow-hidden rounded-md border border-[#d8c8b7] bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#eadfd3] bg-[#f6efe7] px-4 py-3">
+        <div>
+          <p className="text-xs font-bold text-[#a65f3f]">البقشيش</p>
+          <h2 className="text-lg font-black text-[#181818]">متابعة البقشيش Read Only</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+          <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-800">اليوم: {formatCurrency(tipsSummary.todayTotal)}</span>
+          <span className="rounded-md border border-[#e4d8c8] bg-white px-2 py-1 text-[#4a3b34]">آخر 7 أيام: {formatCurrency(tipsSummary.weekTotal)}</span>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[920px] border-collapse text-right text-xs">
+          <thead className="bg-[#2b2421] text-white">
+            <tr>
+              <th className="border border-[#463d38] px-3 py-2">التاريخ</th>
+              <th className="border border-[#463d38] px-3 py-2">الوردية</th>
+              <th className="border border-[#463d38] px-3 py-2">الطاولة</th>
+              <th className="border border-[#463d38] px-3 py-2">قيمة الفاتورة</th>
+              <th className="border border-[#463d38] px-3 py-2">البقشيش</th>
+              <th className="border border-[#463d38] px-3 py-2">طريقة الدفع</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tipsSummary.latestTips.map((tip) => (
+              <tr key={tip.id} className="odd:bg-white even:bg-[#fffdfa]">
+                <td className="border border-[#eadfd3] px-3 py-2">{formatDateTime(tip.createdAt)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2" dir="ltr">{tip.cashShiftId ? tip.cashShiftId.slice(0, 8) : "-"}</td>
+                <td className="border border-[#eadfd3] px-3 py-2">{tip.tableNumber ? `طاولة ${tip.tableNumber}` : "-"}</td>
+                <td className="border border-[#eadfd3] px-3 py-2 font-semibold text-[#181818]">{formatCurrency(tip.invoiceAmount)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2 font-black text-emerald-700">{formatCurrency(tip.amount)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2">{expensePaymentMethodLabels[tip.method]}</td>
+              </tr>
+            ))}
+            {tipsSummary.latestTips.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="border border-[#eadfd3] px-3 py-5 text-center text-[#7c6b60]">لا توجد بقشيشات مسجلة حالياً.</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function CashShiftCard({
   openShift,
   expectedCash,
@@ -386,6 +438,7 @@ function CashShiftCard({
                   <th className="border border-[#463d38] px-3 py-2">وقت الفتح</th>
                   <th className="border border-[#463d38] px-3 py-2">الرصيد الافتتاحي</th>
                   <th className="border border-[#463d38] px-3 py-2">مبيعات نقدية</th>
+                  <th className="border border-[#463d38] px-3 py-2">Tips نقدية</th>
                   <th className="border border-[#463d38] px-3 py-2">مصروفات نقدية</th>
                   <th className="border border-[#463d38] px-3 py-2">دفعات موردين نقدية</th>
                   <th className="border border-[#463d38] px-3 py-2">النقد المتوقع</th>
@@ -400,6 +453,7 @@ function CashShiftCard({
                   <td className="border border-[#eadfd3] px-3 py-2">{formatTime(openShift.openedAt)}</td>
                   <td className="border border-[#eadfd3] px-3 py-2 font-semibold">{formatCurrency(openShift.openingCash)}</td>
                   <td className="border border-[#eadfd3] px-3 py-2 font-semibold text-emerald-700">{formatCurrency(expectedCash?.cashSales ?? 0)}</td>
+                  <td className="border border-[#eadfd3] px-3 py-2 font-semibold text-emerald-700">{formatCurrency(expectedCash?.cashTips ?? 0)}</td>
                   <td className="border border-[#eadfd3] px-3 py-2 font-semibold text-rose-700">{formatCurrency(expectedCash?.cashExpenses ?? 0)}</td>
                   <td className="border border-[#eadfd3] px-3 py-2 font-semibold text-rose-700">{formatCurrency(expectedCash?.cashSupplierPayments ?? 0)}</td>
                   <td className="border border-[#eadfd3] px-3 py-2 text-sm font-black">{formatCurrency(expectedCash?.expectedCash ?? openShift.openingCash)}</td>
@@ -534,6 +588,7 @@ function FinanceOverview({
   payments,
   expenses,
   purchases,
+  tipsSummary,
   isSaving,
 }: {
   salesSummary: FinanceSalesSummary;
@@ -547,6 +602,7 @@ function FinanceOverview({
   payments: PurchasePayment[];
   expenses: Expense[];
   purchases: Purchase[];
+  tipsSummary: TipsSummary;
   isSaving: boolean;
 }) {
   const today = todayKey();
@@ -554,9 +610,10 @@ function FinanceOverview({
   const supplierPaidToday = payments.filter((payment) => localDateKey(payment.createdAt) === today).reduce((total, payment) => total + payment.amount, 0);
   const supplierPayables = unpaidPurchases.reduce((total, purchase) => total + purchase.totalAmount, 0);
   const cashSalesToday = expectedCash?.cashSales ?? 0;
+  const cashTipsToday = expectedCash?.cashTips ?? 0;
   const cashExpensesToday = expectedCash?.cashExpenses ?? 0;
   const cashSupplierPaidToday = expectedCash?.cashSupplierPayments ?? 0;
-  const cashNetToday = cashSalesToday - cashExpensesToday - cashSupplierPaidToday;
+  const cashNetToday = cashSalesToday + cashTipsToday - cashExpensesToday - cashSupplierPaidToday;
   const kpis: FinanceKpi[] = [
     {
       title: "مبيعات اليوم",
@@ -570,6 +627,13 @@ function FinanceOverview({
       value: formatCurrency(salesSummary.receivedToday),
       helper: "المبالغ المستلمة من المبيعات",
       icon: Banknote,
+      tone: "income",
+    },
+    {
+      title: "البقشيش اليوم",
+      value: formatCurrency(salesSummary.tipsToday),
+      helper: "مسجل منفصلاً عن المبيعات",
+      icon: HandCoins,
       tone: "income",
     },
     {
@@ -691,7 +755,8 @@ function FinanceOverview({
         isSaving={isSaving}
       />
 
-      <CashBoxCard cashIn={cashSalesToday} cashExpenses={cashExpensesToday} cashSupplierPayments={cashSupplierPaidToday} cashNet={cashNetToday} />
+      <TipsOverview tipsSummary={tipsSummary} />
+      <CashBoxCard cashIn={cashSalesToday} cashTips={cashTipsToday} cashExpenses={cashExpensesToday} cashSupplierPayments={cashSupplierPaidToday} cashNet={cashNetToday} />
       <RecentCashShifts shifts={recentCashShifts.slice(0, 5)} />
       <FinancialMovements movements={movements} />
     </div>
@@ -845,6 +910,7 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
   const [payments, setPayments] = useState<PurchasePayment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [salesSummary, setSalesSummary] = useState<FinanceSalesSummary | null>(null);
+  const [tipsSummary, setTipsSummary] = useState<TipsSummary | null>(null);
   const [openShift, setOpenShift] = useState<CashShift | null>(null);
   const [expectedCash, setExpectedCash] = useState<ExpectedCashBreakdown | null>(null);
   const [shiftMovements, setShiftMovements] = useState<CashShiftMovement[]>([]);
@@ -897,12 +963,13 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
     }
     setError("");
     try {
-      const [nextRequests, nextPurchases, nextPayments, nextExpenses, nextSalesSummary, nextOpenCashShifts, nextRecentCashShifts, nextCashierOptions] = await Promise.all([
+      const [nextRequests, nextPurchases, nextPayments, nextExpenses, nextSalesSummary, nextTipsSummary, nextOpenCashShifts, nextRecentCashShifts, nextCashierOptions] = await Promise.all([
         getPurchaseRequests(),
         getPurchases(),
         getPurchasePayments(),
         mode === "finance" ? getExpenses() : Promise.resolve([]),
         mode === "finance" ? getFinanceSalesSummary() : Promise.resolve(null),
+        mode === "finance" ? getTipsSummary() : Promise.resolve(null),
         mode === "finance" ? getOpenCashShifts() : Promise.resolve([]),
         mode === "finance" ? getRecentCashShifts() : Promise.resolve([]),
         mode === "finance" ? getCashierOptions() : Promise.resolve([]),
@@ -916,13 +983,14 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
       setPayments(nextPayments);
       setExpenses(nextExpenses);
       setSalesSummary(nextSalesSummary);
+      setTipsSummary(nextTipsSummary);
       setOpenShift(nextOpenShift);
       setOpenCashShifts(nextOpenCashShifts);
       setExpectedCash(nextExpectedCash);
       setShiftMovements(nextShiftMovements);
       setRecentCashShifts(nextRecentCashShifts);
       setCashierOptions(nextCashierOptions);
-      return { nextRequests, nextPurchases, nextPayments, nextExpenses, nextSalesSummary, nextOpenCashShifts, nextOpenShift, nextExpectedCash, nextShiftMovements, nextRecentCashShifts, nextCashierOptions };
+      return { nextRequests, nextPurchases, nextPayments, nextExpenses, nextSalesSummary, nextTipsSummary, nextOpenCashShifts, nextOpenShift, nextExpectedCash, nextShiftMovements, nextRecentCashShifts, nextCashierOptions };
     } catch (loadError) {
       logSupabaseError("[finance dashboard load]", loadError);
       setError("تعذر تحميل بيانات الحسابات.");
@@ -965,6 +1033,7 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
     const channel = supabase
       .channel(`finance-dashboard-realtime-${mode}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "payment_tips" }, () => scheduleReload())
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => scheduleReload())
       .on("postgres_changes", { event: "*", schema: "public", table: "table_sessions" }, () => scheduleReload())
       .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, () => scheduleReload())
@@ -1115,7 +1184,7 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
       {isLoading && mode === "finance" && activeTab === "overview" ? <FinanceSkeleton /> : null}
       {isLoading && (mode !== "finance" || activeTab !== "overview") ? <div className="rounded-md border border-[#e4d8c8] bg-white p-5 text-sm text-[#7c6b60]">جارٍ التحميل...</div> : null}
 
-      {mode === "finance" && activeTab === "overview" && !isLoading && salesSummary ? (
+      {mode === "finance" && activeTab === "overview" && !isLoading && salesSummary && tipsSummary ? (
         <FinanceOverview
           salesSummary={salesSummary}
           openShift={openShift}
@@ -1128,6 +1197,7 @@ export function FinanceDashboard({ mode = "finance" }: { mode?: "finance" | "adm
           payments={payments}
           expenses={expenses}
           purchases={purchases}
+          tipsSummary={tipsSummary}
           isSaving={isSaving}
         />
       ) : null}

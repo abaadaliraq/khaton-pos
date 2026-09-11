@@ -8,7 +8,7 @@ export function KitchenToast({ message }: KitchenToastProps) {
   }
 
   return (
-    <div className="fixed left-4 right-4 top-24 z-50 mx-auto max-w-md rounded-lg border border-white/10 bg-[#302B27] px-4 py-3 text-center font-medium text-[#FFF8EE] shadow-lg">
+    <div className="fixed left-4 right-4 top-24 z-50 mx-auto max-w-md rounded-lg border border-[#D8C8B7] bg-white px-4 py-3 text-center font-bold text-[#2C211D] shadow-lg">
       {message}
     </div>
   );

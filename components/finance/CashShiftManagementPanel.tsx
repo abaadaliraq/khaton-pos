@@ -10,8 +10,10 @@ import {
   getCashShiftMovementSummaries,
   getExpectedCashForShift,
   getRecentCashShifts,
+  getTipsSummary,
 } from "@/services/financeService";
-import type { CashierOption, CashShift, CashShiftMovementSummary, ExpectedCashBreakdown } from "@/types/finance";
+import type { CashierOption, CashShift, CashShiftMovementSummary, ExpectedCashBreakdown, TipsSummary } from "@/types/finance";
+import { expensePaymentMethodLabels } from "@/types/finance";
 
 type StatusFilter = "all" | CashShift["status"];
 type DialogState = "emergencyClose" | null;
@@ -37,11 +39,57 @@ function emptySummary(shiftId: string): CashShiftMovementSummary {
   return { shiftId, cashIn: 0, cashOut: 0 };
 }
 
+function TipsOversightTable({ tipsSummary }: { tipsSummary: TipsSummary | null }) {
+  return (
+    <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#eee4d8] bg-[#f6efe7] px-4 py-3">
+        <h2 className="text-lg font-black text-[#181818]">البقشيش حسب الوردية والتاريخ</h2>
+        <div className="flex flex-wrap gap-2 text-xs font-bold">
+          <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-800">اليوم: {formatCurrency(tipsSummary?.todayTotal ?? 0)}</span>
+          <span className="rounded-md border border-[#e4d8c8] bg-white px-2 py-1 text-[#4a3b34]">آخر 7 أيام: {formatCurrency(tipsSummary?.weekTotal ?? 0)}</span>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[920px] border-collapse text-right text-xs">
+          <thead className="bg-[#2b2421] text-white">
+            <tr>
+              <th className="border border-[#463d38] px-3 py-2">التاريخ</th>
+              <th className="border border-[#463d38] px-3 py-2">الوردية</th>
+              <th className="border border-[#463d38] px-3 py-2">الطاولة</th>
+              <th className="border border-[#463d38] px-3 py-2">قيمة الفاتورة</th>
+              <th className="border border-[#463d38] px-3 py-2">البقشيش</th>
+              <th className="border border-[#463d38] px-3 py-2">طريقة الدفع</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(tipsSummary?.latestTips ?? []).map((tip) => (
+              <tr key={tip.id} className="odd:bg-white even:bg-[#fffdfa]">
+                <td className="border border-[#eadfd3] px-3 py-2">{formatDate(tip.createdAt)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2" dir="ltr">{tip.cashShiftId ? tip.cashShiftId.slice(0, 8) : "-"}</td>
+                <td className="border border-[#eadfd3] px-3 py-2">{tip.tableNumber ? `طاولة ${tip.tableNumber}` : "-"}</td>
+                <td className="border border-[#eadfd3] px-3 py-2 font-semibold text-[#181818]">{formatCurrency(tip.invoiceAmount)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2 font-black text-emerald-700">{formatCurrency(tip.amount)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2">{expensePaymentMethodLabels[tip.method]}</td>
+              </tr>
+            ))}
+            {(tipsSummary?.latestTips.length ?? 0) === 0 ? (
+              <tr>
+                <td colSpan={6} className="border border-[#eadfd3] px-3 py-5 text-center text-sm text-[#7c6b60]">لا توجد بقشيشات مسجلة حالياً.</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export function CashShiftManagementPanel() {
   const [shifts, setShifts] = useState<CashShift[]>([]);
   const [cashiers, setCashiers] = useState<CashierOption[]>([]);
   const [movementSummaries, setMovementSummaries] = useState<Record<string, CashShiftMovementSummary>>({});
   const [openExpected, setOpenExpected] = useState<Record<string, ExpectedCashBreakdown>>({});
+  const [tipsSummary, setTipsSummary] = useState<TipsSummary | null>(null);
   const [selectedShift, setSelectedShift] = useState<CashShift | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [countedCash, setCountedCash] = useState("");
@@ -62,7 +110,7 @@ export function CashShiftManagementPanel() {
     setError("");
 
     try {
-      const [nextShifts, nextCashiers] = await Promise.all([getRecentCashShifts(), getCashierOptions()]);
+      const [nextShifts, nextCashiers, nextTipsSummary] = await Promise.all([getRecentCashShifts(), getCashierOptions(), getTipsSummary()]);
       const summaries = await getCashShiftMovementSummaries(nextShifts.map((shift) => shift.id));
       const expectedPairs = await Promise.all(
         nextShifts
@@ -72,6 +120,7 @@ export function CashShiftManagementPanel() {
 
       setShifts(nextShifts);
       setCashiers(nextCashiers);
+      setTipsSummary(nextTipsSummary);
       setMovementSummaries(Object.fromEntries(summaries.map((summary) => [summary.shiftId, summary])));
       setOpenExpected(Object.fromEntries(expectedPairs.filter((pair): pair is readonly [string, ExpectedCashBreakdown] => pair[1] !== null)));
     } catch (loadError) {
@@ -105,6 +154,7 @@ export function CashShiftManagementPanel() {
       .channel("cash-shift-management-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "cash_shifts" }, scheduleReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "cash_movements" }, scheduleReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "payment_tips" }, scheduleReload)
       .subscribe();
 
     return () => {
@@ -205,6 +255,8 @@ export function CashShiftManagementPanel() {
 
       {message ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p> : null}
       {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+
+      <TipsOversightTable tipsSummary={tipsSummary} />
 
       <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
         {isLoading ? <p className="p-4 text-sm text-[#7c6b60]">جارٍ تحميل الورديات...</p> : null}

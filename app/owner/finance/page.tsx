@@ -1,12 +1,13 @@
 "use client";
 
-import { Eye, Landmark, ReceiptText, TrendingDown, WalletCards } from "lucide-react";
+import { Eye, HandCoins, Landmark, ReceiptText, TrendingDown, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ExpenseVoucherDialog, expenseVoucherNumber } from "@/components/finance/ExpenseVoucherDialog";
 import { PurchasePaymentVoucherDialog, purchasePaymentVoucherNumber } from "@/components/finance/PurchasePaymentVoucherDialog";
 import { formatCurrency } from "@/lib/formatCurrency";
+import { getTipsSummary } from "@/services/financeService";
 import { getOwnerFinanceData, type OwnerFinanceData } from "@/services/ownerFinanceService";
-import type { Expense, PurchasePayment } from "@/types/finance";
+import type { Expense, PurchasePayment, TipsSummary } from "@/types/finance";
 import { expenseCategoryLabels, expensePaymentMethodLabels } from "@/types/finance";
 
 const baghdadTimeZone = "Asia/Baghdad";
@@ -113,20 +114,63 @@ function PaymentsPanel({ payments, onOpenVoucher }: { payments: PurchasePayment[
   );
 }
 
+function TipsPanel({ tipsSummary }: { tipsSummary: TipsSummary | null }) {
+  return (
+    <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#eee4d8] p-4">
+        <h2 className="font-semibold text-[#2f211c]">البقشيش</h2>
+        <div className="flex flex-wrap gap-2 text-xs font-bold">
+          <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-800">اليوم: {formatCurrency(tipsSummary?.todayTotal ?? 0)}</span>
+          <span className="rounded-md border border-[#e4d8c8] bg-[#fbfaf7] px-2 py-1 text-[#4a3b34]">آخر 7 أيام: {formatCurrency(tipsSummary?.weekTotal ?? 0)}</span>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[900px] border-collapse text-right text-xs">
+          <thead className="bg-[#2b2421] text-white">
+            <tr>
+              <th className="border border-[#463d38] px-3 py-2">التاريخ</th>
+              <th className="border border-[#463d38] px-3 py-2">الوردية</th>
+              <th className="border border-[#463d38] px-3 py-2">الطاولة</th>
+              <th className="border border-[#463d38] px-3 py-2">قيمة الفاتورة</th>
+              <th className="border border-[#463d38] px-3 py-2">البقشيش</th>
+              <th className="border border-[#463d38] px-3 py-2">طريقة الدفع</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(tipsSummary?.latestTips ?? []).map((tip) => (
+              <tr key={tip.id} className="odd:bg-white even:bg-[#fffdfa]">
+                <td className="border border-[#eadfd3] px-3 py-2">{formatDateTime(tip.createdAt)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2" dir="ltr">{tip.cashShiftId ? tip.cashShiftId.slice(0, 8) : "-"}</td>
+                <td className="border border-[#eadfd3] px-3 py-2">{tip.tableNumber ? `طاولة ${tip.tableNumber}` : "-"}</td>
+                <td className="border border-[#eadfd3] px-3 py-2 font-semibold text-[#181818]">{formatCurrency(tip.invoiceAmount)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2 font-black text-emerald-700">{formatCurrency(tip.amount)}</td>
+                <td className="border border-[#eadfd3] px-3 py-2">{expensePaymentMethodLabels[tip.method]}</td>
+              </tr>
+            ))}
+            {(tipsSummary?.latestTips.length ?? 0) === 0 ? <tr><td colSpan={6} className="border border-[#eadfd3] px-3 py-5 text-center text-[#7c6b60]">لا توجد بقشيشات مسجلة حالياً.</td></tr> : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export default function OwnerFinancePage() {
   const [data, setData] = useState<OwnerFinanceData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [selectedPayment, setSelectedPayment] = useState<PurchasePayment | null>(null);
+  const [tipsSummary, setTipsSummary] = useState<TipsSummary | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     async function loadFinance() {
       try {
-        const nextData = await getOwnerFinanceData();
+        const [nextData, nextTipsSummary] = await Promise.all([getOwnerFinanceData(), getTipsSummary()]);
         if (!isMounted) return;
         setData(nextData);
+        setTipsSummary(nextTipsSummary);
         setErrorMessage(nextData.errors.length > 0 ? "تعذر تحميل بعض بيانات الحسابات." : "");
       } catch (error) {
         console.error("Failed to load owner finance data", error);
@@ -185,9 +229,12 @@ export default function OwnerFinancePage() {
             <SummaryCard title="مصروفات هذا الشهر" value={formatCurrency(summary.expensesMonth)} icon={Landmark} />
             <SummaryCard title="دفعات الموردين اليوم" value={formatCurrency(summary.supplierPaymentsToday)} icon={WalletCards} />
             <SummaryCard title="دفعات الموردين هذا الشهر" value={formatCurrency(summary.supplierPaymentsMonth)} icon={ReceiptText} />
+            <SummaryCard title="البقشيش اليوم" value={formatCurrency(tipsSummary?.todayTotal ?? 0)} icon={HandCoins} />
             <SummaryCard title="إجمالي المبالغ المستحقة للموردين" value={formatCurrency(summary.supplierPayables)} icon={WalletCards} />
             <SummaryCard title="عدد فواتير الموردين غير المدفوعة" value={formatNumber(summary.unpaidInvoiceCount) + " فاتورة"} icon={ReceiptText} />
           </section>
+
+          <TipsPanel tipsSummary={tipsSummary} />
 
           <div className="grid gap-4 xl:grid-cols-2">
             <ExpensesPanel expenses={latestExpenses} onOpenVoucher={setSelectedExpense} />

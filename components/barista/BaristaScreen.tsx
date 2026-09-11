@@ -194,6 +194,9 @@ export function BaristaScreen({ session }: BaristaScreenProps) {
       .channel("barista-order-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, scheduleRefresh)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_status_events" }, scheduleRefresh)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_item_status_events" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "table_sessions" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_requisitions" }, scheduleRequisitionRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_requisition_items" }, () => scheduleRequisitionRefresh())
       .subscribe((status, error) => {
@@ -275,13 +278,19 @@ export function BaristaScreen({ session }: BaristaScreenProps) {
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#171513] text-[#FFF8EE]">
+    <div dir="rtl" className="min-h-screen bg-[#F7F1E8] text-[#2C211D]">
       <BaristaHeader
         session={session}
         pendingReceiptCount={pendingReceiptCount}
         onOpenMaterialRequest={() => setIsMaterialRequestOpen(true)}
         onOpenRequests={() => setIsRequestsOpen(true)}
         onOpenWaste={() => setIsWasteOpen(true)}
+        soundEnabled={notifications.soundEnabled}
+        soundNeedsActivation={notifications.soundNeedsActivation}
+        audioState={notifications.audioState}
+        lastTestStatus={notifications.lastTestStatus}
+        onToggleSound={notifications.toggleSound}
+        onTestSound={notifications.testSound}
         onRefresh={() => {
           void Promise.all([refreshFromDatabase(), refreshRequisitions()]);
         }}
@@ -298,10 +307,10 @@ export function BaristaScreen({ session }: BaristaScreenProps) {
         {isLoading ? (
           <section className="grid gap-3 lg:grid-cols-3">
             {[0, 1, 2].map((item) => (
-              <div key={item} className="h-64 animate-pulse rounded-lg border border-white/10 bg-[#24211E]">
-                <div className="m-4 h-8 rounded bg-white/10" />
-                <div className="mx-4 mt-8 h-20 rounded bg-white/5" />
-                <div className="mx-4 mt-6 h-12 rounded bg-[#D88A3D]/20" />
+              <div key={item} className="h-64 animate-pulse rounded-lg border border-[#E1D3C2] bg-white">
+                <div className="m-4 h-8 rounded bg-[#EFE3D4]" />
+                <div className="mx-4 mt-8 h-20 rounded bg-[#F7F1E8]" />
+                <div className="mx-4 mt-6 h-12 rounded bg-[#E8D4C6]" />
               </div>
             ))}
           </section>
@@ -315,7 +324,7 @@ export function BaristaScreen({ session }: BaristaScreenProps) {
             onOpenDetails={setSelectedOrder}
           />
         ) : (
-          <section className="flex min-h-[360px] items-center justify-center rounded-lg border border-dashed border-white/10 bg-[#24211E] text-base text-[#C9BEB2]">
+          <section className="flex min-h-[360px] items-center justify-center rounded-lg border border-dashed border-[#D8C8B7] bg-white text-base font-bold text-[#6F6258]">
             لا توجد طلبات باريستا حالياً
           </section>
         )}

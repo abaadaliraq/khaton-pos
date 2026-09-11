@@ -27,19 +27,23 @@ export function KitchenOrderCard({ order, now, onStatusChange, onOpenDetails }: 
       : hasPreparingItems
         ? { label: "الطلب جاهز", next: "ready" as const, icon: CheckCircle2 }
         : null;
+  const actionClassName =
+    action?.next === "ready"
+      ? "bg-[#2F7D57] text-white hover:bg-[#256847] focus-visible:ring-[#8fd8b4]"
+      : "bg-[#B94B43] text-white hover:bg-[#9f3f38] focus-visible:ring-[#f0a49e]";
 
   return (
     <article
       className={clsx(
-        "rounded-lg border bg-[#24211E] p-4 shadow-sm",
-        late ? "border-[#B94B43]" : order.priority === "priority" ? "border-[#D88A3D]" : "border-white/10",
+        "rounded-lg border bg-white p-4 shadow-sm",
+        late ? "border-[#B94B43]" : order.priority === "priority" ? "border-[#D88A3D]" : "border-[#E1D3C2]",
       )}
     >
       <button type="button" onClick={() => onOpenDetails(order)} className="w-full text-right">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm text-[#C9BEB2]">{formatOrderLabel(order.orderNumber)}</p>
-            <h3 className="text-3xl font-semibold text-[#FFF8EE]">طاولة {order.tableId}</h3>
+            <p className="text-sm font-bold text-[#6F6258]">{formatOrderLabel(order.orderNumber)}</p>
+            <h3 className="text-3xl font-black text-[#2C211D]">طاولة {order.tableId}</h3>
             {order.roundNo > 1 ? (
               <span className="mt-2 inline-flex rounded-full bg-[#B94B43] px-3 py-1 text-sm font-bold text-white">
                 إضافة #{order.roundNo}
@@ -47,7 +51,7 @@ export function KitchenOrderCard({ order, now, onStatusChange, onOpenDetails }: 
             ) : null}
           </div>
           <div className="flex flex-col items-end gap-2">
-            <span className="rounded-full bg-[#302B27] px-3 py-1 text-sm text-[#FFF8EE]">{kitchenStatusLabels[order.status]}</span>
+            <span className="rounded-full border border-[#D8C8B7] bg-[#F7F1E8] px-3 py-1 text-sm font-bold text-[#2C211D]">{kitchenStatusLabels[order.status]}</span>
             {hasReadyItems && hasSubmittedItems ? (
               <span className="rounded-full border border-[#D88A3D]/35 bg-[#D88A3D]/10 px-3 py-1 text-xs font-semibold text-[#f3c68d]">
                 بعض الأصناف لم تبدأ
@@ -68,7 +72,7 @@ export function KitchenOrderCard({ order, now, onStatusChange, onOpenDetails }: 
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-[#C9BEB2]">
+        <div className="mt-3 grid grid-cols-2 gap-2 text-sm font-semibold text-[#5A4A42]">
           <span>الكابتن: {order.captainName}</span>
           <span>{itemCount} صنف</span>
           <span className="flex items-center gap-1">
@@ -87,7 +91,7 @@ export function KitchenOrderCard({ order, now, onStatusChange, onOpenDetails }: 
         <button
           type="button"
           onClick={() => onStatusChange(order.id, action.next)}
-          className="mt-4 flex h-13 w-full items-center justify-center gap-2 rounded-lg bg-[#D88A3D] text-lg font-semibold text-[#171513] hover:bg-[#e29b54]"
+          className={clsx("mt-4 flex h-13 w-full items-center justify-center gap-2 rounded-lg text-lg font-bold shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white", actionClassName)}
         >
           <action.icon size={20} />
           {action.label}

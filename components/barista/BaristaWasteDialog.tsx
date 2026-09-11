@@ -108,63 +108,63 @@ export function BaristaWasteDialog({ isOpen, onClose, onChanged }: BaristaWasteD
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4">
-        <section className="w-full max-w-6xl rounded-lg border border-white/10 bg-[#24211E] p-4 text-[#FFF8EE] shadow-2xl">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
+      <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 p-4">
+        <section className="w-full max-w-6xl rounded-lg border border-[#E1D3C2] bg-white p-4 text-[#2C211D] shadow-2xl">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E1D3C2] pb-3">
             <div className="flex items-center gap-2">
               <Trash2 size={19} className="text-[#D88A3D]" />
               <div>
-                <h2 className="font-semibold">الهدر والتلف</h2>
-                <p className="mt-1 text-xs text-[#C9BEB2]">سجل هدر المواد المصروفة للباريستا فقط</p>
+                <h2 className="font-black">الهدر والتلف</h2>
+                <p className="mt-1 text-xs font-semibold text-[#6F6258]">سجل هدر المواد المصروفة للباريستا فقط</p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => setIsPostOpen(true)} className="flex h-10 items-center gap-2 rounded-lg bg-[#D88A3D] px-3 text-sm font-semibold text-[#171513]">
+              <button type="button" onClick={() => setIsPostOpen(true)} className="flex h-10 items-center gap-2 rounded-lg bg-[#B94B43] px-3 text-sm font-bold text-white">
                 <Plus size={16} />
                 تسجيل هدر
               </button>
-              <button type="button" onClick={() => void load()} className="rounded-lg border border-white/10 p-2 text-[#C9BEB2] hover:bg-[#302B27]" aria-label="تحديث">
+              <button type="button" onClick={() => void load()} className="rounded-lg border border-[#D8C8B7] bg-[#FFFDF9] p-2 text-[#2C211D] hover:bg-[#F1E6D8]" aria-label="تحديث">
                 <RefreshCw size={17} />
               </button>
-              <button type="button" onClick={onClose} className="rounded-lg border border-white/10 p-2 text-[#C9BEB2] hover:bg-[#302B27]" aria-label="إغلاق">
+              <button type="button" onClick={onClose} className="rounded-lg border border-[#D8C8B7] bg-[#FFFDF9] p-2 text-[#2C211D] hover:bg-[#F1E6D8]" aria-label="إغلاق">
                 <X size={17} />
               </button>
             </div>
           </div>
 
-          {error ? <p className="mt-3 rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">{error}</p> : null}
-          {isLoading ? <p className="mt-4 text-sm text-[#C9BEB2]">جارٍ تحميل السجل...</p> : null}
+          {error ? <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-800">{error}</p> : null}
+          {isLoading ? <p className="mt-4 text-sm font-bold text-[#6F6258]">جارٍ تحميل السجل...</p> : null}
 
-          <div className="mt-4 overflow-x-auto rounded-lg border border-white/10">
+          <div className="mt-4 overflow-x-auto rounded-lg border border-[#E1D3C2]">
             <table className="w-full min-w-[980px] table-fixed border-collapse text-xs">
-              <thead className="bg-[#171513] text-[#FFF8EE]">
+              <thead className="bg-[#F2E7D9] text-[#2C211D]">
                 <tr>
-                  <th className="border-l border-white/10 px-3 py-2 text-right">التاريخ</th>
-                  <th className="border-l border-white/10 px-3 py-2 text-right">المادة</th>
-                  <th className="border-l border-white/10 px-3 py-2 text-right">الكمية</th>
-                  <th className="border-l border-white/10 px-3 py-2 text-right">الوحدة</th>
-                  <th className="border-l border-white/10 px-3 py-2 text-right">السبب</th>
-                  <th className="border-l border-white/10 px-3 py-2 text-right">طلب الصرف</th>
-                  <th className="border-l border-white/10 px-3 py-2 text-right">المستخدم</th>
+                  <th className="border-l border-[#E1D3C2] px-3 py-2 text-right">التاريخ</th>
+                  <th className="border-l border-[#E1D3C2] px-3 py-2 text-right">المادة</th>
+                  <th className="border-l border-[#E1D3C2] px-3 py-2 text-right">الكمية</th>
+                  <th className="border-l border-[#E1D3C2] px-3 py-2 text-right">الوحدة</th>
+                  <th className="border-l border-[#E1D3C2] px-3 py-2 text-right">السبب</th>
+                  <th className="border-l border-[#E1D3C2] px-3 py-2 text-right">طلب الصرف</th>
+                  <th className="border-l border-[#E1D3C2] px-3 py-2 text-right">المستخدم</th>
                   <th className="px-3 py-2 text-right">الملاحظة</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/10">
+              <tbody>
                 {rows.map(({ report, item }) => (
-                  <tr key={item.id} className="odd:bg-[#24211E] even:bg-[#211e1b]">
-                    <td className="border-l border-white/10 px-3 py-2 text-[#C9BEB2]">{formatDateTime(report.postedAt)}</td>
-                    <td className="border-l border-white/10 px-3 py-2 font-semibold">{item.inventoryItemName}</td>
-                    <td className="border-l border-white/10 px-3 py-2 text-rose-100">{formatQuantity(item.quantityBase, item.baseUnitCode, item.baseUnitName)}</td>
-                    <td className="border-l border-white/10 px-3 py-2 text-[#C9BEB2]">{item.baseUnitName}</td>
-                    <td className="border-l border-white/10 px-3 py-2 text-[#C9BEB2]">{reasonLabels[item.reason]}</td>
-                    <td className="border-l border-white/10 px-3 py-2" dir="ltr">{item.requisitionCode ?? "-"}</td>
-                    <td className="border-l border-white/10 px-3 py-2 text-[#C9BEB2]">{report.postedByName}</td>
-                    <td className="truncate px-3 py-2 text-[#C9BEB2]" title={item.notes ?? report.note ?? ""}>{item.notes ?? report.note ?? "-"}</td>
+                  <tr key={item.id} className="border-b border-[#E1D3C2] odd:bg-white even:bg-[#FFF9F1]">
+                    <td className="border-l border-[#E1D3C2] px-3 py-2 font-semibold text-[#5A4A42]">{formatDateTime(report.postedAt)}</td>
+                    <td className="border-l border-[#E1D3C2] px-3 py-2 font-bold">{item.inventoryItemName}</td>
+                    <td className="border-l border-[#E1D3C2] px-3 py-2 font-bold text-rose-800">{formatQuantity(item.quantityBase, item.baseUnitCode, item.baseUnitName)}</td>
+                    <td className="border-l border-[#E1D3C2] px-3 py-2 font-semibold text-[#5A4A42]">{item.baseUnitName}</td>
+                    <td className="border-l border-[#E1D3C2] px-3 py-2 font-semibold text-[#5A4A42]">{reasonLabels[item.reason]}</td>
+                    <td className="border-l border-[#E1D3C2] px-3 py-2 font-semibold" dir="ltr">{item.requisitionCode ?? "-"}</td>
+                    <td className="border-l border-[#E1D3C2] px-3 py-2 font-semibold text-[#5A4A42]">{report.postedByName}</td>
+                    <td className="truncate px-3 py-2 font-semibold text-[#5A4A42]" title={item.notes ?? report.note ?? ""}>{item.notes ?? report.note ?? "-"}</td>
                   </tr>
                 ))}
                 {!isLoading && rows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-8 text-center text-sm text-[#C9BEB2]">لا يوجد سجل هدر للباريستا.</td>
+                    <td colSpan={8} className="px-3 py-8 text-center text-sm font-bold text-[#6F6258]">لا يوجد سجل هدر للباريستا.</td>
                   </tr>
                 ) : null}
               </tbody>

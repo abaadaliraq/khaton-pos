@@ -11,8 +11,11 @@ type CashierHeaderProps = {
   session: UserSession;
   soundEnabled: boolean;
   soundNeedsActivation: boolean;
+  audioState?: string;
+  lastTestStatus?: string;
   awaitingPaymentCount: number;
   onToggleSound: () => void;
+  onTestSound: () => void;
   onOpenShiftSummary: () => void;
 };
 
@@ -26,7 +29,7 @@ function getTime() {
   }).format(new Date());
 }
 
-export function CashierHeader({ session, soundEnabled, soundNeedsActivation, awaitingPaymentCount, onToggleSound, onOpenShiftSummary }: CashierHeaderProps) {
+export function CashierHeader({ session, soundEnabled, soundNeedsActivation, audioState = "none", lastTestStatus = "idle", awaitingPaymentCount, onToggleSound, onTestSound, onOpenShiftSummary }: CashierHeaderProps) {
   const router = useRouter();
   const [time, setTime] = useState("");
 
@@ -73,8 +76,21 @@ export function CashierHeader({ session, soundEnabled, soundNeedsActivation, awa
             className="flex h-10 items-center gap-2 rounded-lg border border-[#d8c9b7] bg-white px-3 text-sm font-medium text-[#2C211D] shadow-sm hover:bg-[#E8DCCB]"
           >
             {soundEnabled ? <Volume2 size={16} className="text-[#ff5656]" /> : <VolumeX size={16} />}
-            {soundNeedsActivation ? "اضغط لتفعيل الصوت" : soundEnabled ? "الصوت مفعل" : "الصوت مكتوم"}
+            {soundNeedsActivation ? "تفعيل الصوت" : soundEnabled ? "الصوت مفعّل ✓" : "تفعيل الصوت"}
           </button>
+          <button
+            type="button"
+            onClick={onTestSound}
+            className="flex h-10 items-center gap-2 rounded-lg border border-[#d8c9b7] bg-white px-3 text-sm font-medium text-[#2C211D] shadow-sm hover:bg-[#E8DCCB]"
+          >
+            <Volume2 size={16} className="text-[#B85F4A]" />
+            اختبار الصوت
+          </button>
+          {process.env.NODE_ENV === "development" ? (
+            <span className="h-10 rounded-lg border border-[#d8c9b7] bg-[#FFF9F1] px-3 py-2 text-xs font-bold text-[#5f4b40]">
+              Audio: {audioState} · Last test: {lastTestStatus}
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={onOpenShiftSummary}

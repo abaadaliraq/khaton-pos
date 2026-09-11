@@ -21,11 +21,11 @@ export function CompletedOrdersDialog({ orders, isOpen, onClose }: CompletedOrde
     .slice(0, 10);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[88vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-white/10 bg-[#24211E] p-5 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+      <div className="max-h-[88vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-[#E1D3C2] bg-white p-5 text-[#2C211D] shadow-xl">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-2xl font-semibold text-[#FFF8EE]">الطلبات المكتملة</h2>
-          <button type="button" onClick={onClose} className="rounded-lg border border-white/10 p-2 text-[#FFF8EE] hover:bg-[#302B27]">
+          <h2 className="text-2xl font-black text-[#2C211D]">الطلبات المكتملة</h2>
+          <button type="button" onClick={onClose} className="rounded-lg border border-[#D8C8B7] bg-[#FFFDF9] p-2 text-[#2C211D] hover:bg-[#F1E6D8]">
             <X size={20} />
           </button>
         </div>
@@ -35,12 +35,12 @@ export function CompletedOrdersDialog({ orders, isOpen, onClose }: CompletedOrde
             latestServed.map((order) => {
               const prepMinutes = getPreparationMinutes(order);
               return (
-                <article key={order.id} className="rounded-lg border border-white/10 bg-[#171513] p-4">
+                <article key={order.id} className="rounded-lg border border-[#E1D3C2] bg-[#FFFDF9] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h3 className="text-xl font-semibold text-[#FFF8EE]">طاولة {order.tableId} / {formatOrderLabel(order.orderNumber)}</h3>
-                    <span className="text-[#D88A3D]">مدة التحضير: {prepMinutes ?? "-"} دقيقة</span>
+                    <h3 className="text-xl font-black text-[#2C211D]">طاولة {order.tableId} / {formatOrderLabel(order.orderNumber)}</h3>
+                    <span className="font-bold text-[#B94B43]">مدة التحضير: {prepMinutes ?? "-"} دقيقة</span>
                   </div>
-                  <div className="mt-3 grid gap-2 text-sm text-[#C9BEB2] sm:grid-cols-4">
+                  <div className="mt-3 grid gap-2 text-sm font-semibold text-[#5A4A42] sm:grid-cols-4">
                     <span>وصل: {formatKitchenClock(order.timing.receivedAt)}</span>
                     <span>بدأ: {formatKitchenClock(order.timing.startedAt)}</span>
                     <span>جاهز: {formatKitchenClock(order.timing.readyAt)}</span>
@@ -50,7 +50,7 @@ export function CompletedOrdersDialog({ orders, isOpen, onClose }: CompletedOrde
               );
             })
           ) : (
-            <p className="rounded-lg border border-dashed border-white/10 p-6 text-center text-[#C9BEB2]">لا توجد طلبات مكتملة بعد</p>
+            <p className="rounded-lg border border-dashed border-[#D8C8B7] bg-[#FFFDF9] p-6 text-center font-bold text-[#6F6258]">لا توجد طلبات مكتملة بعد</p>
           )}
         </div>
       </div>

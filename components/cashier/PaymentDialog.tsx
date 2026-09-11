@@ -26,6 +26,8 @@ export function PaymentDialog({ order, isOpen, isSubmitting, onClose, onConfirm 
   const [cashAmount, setCashAmount] = useState("");
   const [cardAmount, setCardAmount] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
+  const [tipAmount, setTipAmount] = useState("");
+  const [cashTipDisposition, setCashTipDisposition] = useState<"return_change" | "tip">("return_change");
   const [reference, setReference] = useState("");
   const [error, setError] = useState("");
 
@@ -37,15 +39,19 @@ export function PaymentDialog({ order, isOpen, isSubmitting, onClose, onConfirm 
 
   const remaining = totals.remainingAmount;
   const cash = Number(cashAmount || 0);
+  const explicitTip = Number(tipAmount || 0);
   const receivedForCash = method === "cash" ? cash : 0;
   const mixedTotal = Number(cashAmount || 0) + Number(cardAmount || 0) + Number(transferAmount || 0);
   const changeAmount = method === "cash" && cash > remaining ? cash - remaining : 0;
+  const selectedTipAmount = method === "cash" ? (cashTipDisposition === "tip" ? changeAmount : 0) : explicitTip;
 
   function resetAndClose() {
     setError("");
     setCashAmount("");
     setCardAmount("");
     setTransferAmount("");
+    setTipAmount("");
+    setCashTipDisposition("return_change");
     setReference("");
     setMethod("cash");
     onClose();
@@ -67,6 +73,11 @@ export function PaymentDialog({ order, isOpen, isSubmitting, onClose, onConfirm 
       return;
     }
 
+    if ((method === "card" || method === "transfer") && (!Number.isFinite(explicitTip) || explicitTip < 0)) {
+      setError("أدخل قيمة البقشيش بشكل صحيح أو اتركها فارغة.");
+      return;
+    }
+
     if (method === "mixed" && (!Number.isFinite(mixedTotal) || mixedTotal !== remaining)) {
       setError("مجموع مبالغ الدفع المختلط يجب أن يساوي المبلغ المطلوب.");
       return;
@@ -78,6 +89,8 @@ export function PaymentDialog({ order, isOpen, isSubmitting, onClose, onConfirm 
       amount: remaining,
       receivedAmount: method === "cash" ? receivedForCash : undefined,
       changeAmount: method === "cash" ? changeAmount : undefined,
+      tipAmount: selectedTipAmount > 0 ? selectedTipAmount : undefined,
+      tipDisposition: method === "cash" ? cashTipDisposition : undefined,
       reference: reference.trim() || undefined,
       createdAt: new Intl.DateTimeFormat("ar-IQ", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()),
     });
@@ -131,18 +144,49 @@ export function PaymentDialog({ order, isOpen, isSubmitting, onClose, onConfirm 
               className="h-11 w-full rounded-lg border border-[#d8c9b7] bg-[#F7F1E8] px-3 outline-none focus:border-[#B85F4A] focus:bg-white"
               placeholder="المبلغ المستلم"
             />
-            <p className="mt-2 text-sm text-[#3B8F8B]">الباقي للزبون: {formatCurrency(Math.max(0, changeAmount))}</p>
+            <div className="mt-2 rounded-md border border-[#e4d8c8] bg-white p-3">
+              <p className="text-sm font-bold text-[#2C211D]">الباقي: {formatCurrency(Math.max(0, changeAmount))}</p>
+              {changeAmount > 0 ? (
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setCashTipDisposition("return_change")}
+                    className={`h-10 rounded-md border text-sm font-bold ${cashTipDisposition === "return_change" ? "border-[#B85F4A] bg-[#B85F4A] text-white" : "border-[#d8c9b7] bg-[#FFFDF9] text-[#2C211D]"}`}
+                  >
+                    إرجاع الباقي
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCashTipDisposition("tip")}
+                    className={`h-10 rounded-md border text-sm font-bold ${cashTipDisposition === "tip" ? "border-[#B85F4A] bg-[#B85F4A] text-white" : "border-[#d8c9b7] bg-[#FFFDF9] text-[#2C211D]"}`}
+                  >
+                    تسجيل الباقي كبقشيش
+                  </button>
+                </div>
+              ) : null}
+              {selectedTipAmount > 0 ? <p className="mt-2 text-sm font-semibold text-emerald-700">سيتم تسجيل بقشيش منفصل: {formatCurrency(selectedTipAmount)}</p> : null}
+            </div>
           </div>
         ) : null}
 
         {method === "card" || method === "transfer" ? (
-          <input
-          value={reference}
-          onChange={(event) => setReference(event.target.value)}
-          disabled={isSubmitting}
-          className="mt-3 h-11 w-full rounded-lg border border-[#d8c9b7] bg-[#F7F1E8] px-3 outline-none focus:border-[#B85F4A] focus:bg-white"
-            placeholder="مرجع اختياري"
-          />
+          <div className="mt-3 grid gap-2">
+            <input
+              value={reference}
+              onChange={(event) => setReference(event.target.value)}
+              disabled={isSubmitting}
+              className="h-11 w-full rounded-lg border border-[#d8c9b7] bg-[#F7F1E8] px-3 outline-none focus:border-[#B85F4A] focus:bg-white"
+              placeholder="مرجع اختياري"
+            />
+            <input
+              value={tipAmount}
+              onChange={(event) => setTipAmount(event.target.value)}
+              disabled={isSubmitting}
+              inputMode="numeric"
+              className="h-11 w-full rounded-lg border border-[#d8c9b7] bg-[#F7F1E8] px-3 outline-none focus:border-[#B85F4A] focus:bg-white"
+              placeholder="بقشيش اختياري منفصل عن قيمة الفاتورة"
+            />
+          </div>
         ) : null}
 
         {method === "mixed" ? (

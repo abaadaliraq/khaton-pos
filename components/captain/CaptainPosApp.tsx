@@ -103,7 +103,10 @@ export function CaptainPosApp() {
       .channel("captain-table-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleTableRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, scheduleTableRefresh)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_status_events" }, scheduleTableRefresh)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_item_status_events" }, scheduleTableRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "table_sessions" }, scheduleTableRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, scheduleTableRefresh)
       .subscribe((status, error) => {
         if (error) {
           console.error("Captain realtime subscription error", error);
@@ -402,6 +405,12 @@ export function CaptainPosApp() {
       <CaptainHeader
         currentTime={currentTime}
         onLogout={logout}
+        soundEnabled={notifications.soundEnabled}
+        soundNeedsActivation={notifications.soundNeedsActivation}
+        audioState={notifications.audioState}
+        lastTestStatus={notifications.lastTestStatus}
+        onToggleSound={notifications.toggleSound}
+        onTestSound={notifications.testSound}
       />
 
       <main className="mx-auto grid max-w-[1500px] gap-4 px-4 pb-24 pt-4 xl:grid-cols-[minmax(0,1fr)_380px] xl:pb-6">

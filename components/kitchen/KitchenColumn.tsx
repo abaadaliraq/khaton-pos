@@ -13,13 +13,13 @@ type KitchenColumnProps = {
 
 export function KitchenColumn({ status, title, orders, now, onStatusChange, onOpenDetails }: KitchenColumnProps) {
   return (
-    <section className="flex min-h-0 flex-col rounded-lg border border-white/10 bg-[#24211E]">
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#24211E] p-4">
+    <section className="flex min-h-0 flex-col rounded-lg border border-[#E1D3C2] bg-[#FFF9F1] shadow-sm">
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#E1D3C2] bg-[#F2E7D9] p-4">
         <div>
-          <h2 className="text-xl font-semibold text-[#FFF8EE]">{title}</h2>
-          <p className="text-sm text-[#C9BEB2]">{kitchenStatusLabels[status]}</p>
+          <h2 className="text-xl font-black text-[#2C211D]">{title}</h2>
+          <p className="text-sm font-bold text-[#6F6258]">{kitchenStatusLabels[status]}</p>
         </div>
-        <span className="rounded-lg bg-[#171513] px-3 py-2 text-lg font-semibold text-[#D88A3D]">{orders.length}</span>
+        <span className="rounded-lg bg-white px-3 py-2 text-lg font-black text-[#B94B43] shadow-sm">{orders.length}</span>
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
         {orders.length > 0 ? (
@@ -33,7 +33,7 @@ export function KitchenColumn({ status, title, orders, now, onStatusChange, onOp
             />
           ))
         ) : (
-          <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-white/10 text-[#C9BEB2]">
+          <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-[#D8C8B7] bg-white text-sm font-bold text-[#6F6258]">
             لا توجد طلبات
           </div>
         )}

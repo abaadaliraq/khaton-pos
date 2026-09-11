@@ -28,7 +28,7 @@ export function KitchenBoard({
             type="button"
             onClick={() => onMobileStatusChange(column.status)}
             className={`h-12 shrink-0 rounded-lg px-4 text-base font-semibold ${
-              activeMobileStatus === column.status ? "bg-[#D88A3D] text-[#171513]" : "bg-[#24211E] text-[#FFF8EE]"
+              activeMobileStatus === column.status ? "bg-[#B94B43] text-white" : "border border-[#D8C8B7] bg-white text-[#2C211D]"
             }`}
           >
             {column.shortTitle}

@@ -1,30 +1,33 @@
-import { Banknote, CheckCircle2, ReceiptText, Utensils } from "lucide-react";
+import { Banknote, CheckCircle2, HandCoins, ReceiptText, Utensils } from "lucide-react";
 import { formatCurrency } from "@/lib/formatCurrency";
 
 type CashierStatsProps = {
   openTables: number;
   paidInvoices: number;
   sales: number;
+  tips: number;
   unpaid: number;
 };
 
 const items = [
   { key: "openTables", label: "الطاولات المفتوحة", icon: Utensils },
   { key: "paidInvoices", label: "الفواتير المدفوعة", icon: CheckCircle2 },
-  { key: "sales", label: "المبيعات الحالية", icon: Banknote },
+  { key: "sales", label: "المبيعات اليوم", icon: Banknote },
+  { key: "tips", label: "البقشيش اليوم", icon: HandCoins },
   { key: "unpaid", label: "غير المدفوع", icon: ReceiptText },
 ] as const;
 
-export function CashierStats({ openTables, paidInvoices, sales, unpaid }: CashierStatsProps) {
+export function CashierStats({ openTables, paidInvoices, sales, tips, unpaid }: CashierStatsProps) {
   const values = {
     openTables,
     paidInvoices,
     sales: formatCurrency(sales),
+    tips: formatCurrency(tips),
     unpaid: formatCurrency(unpaid),
   };
 
   return (
-    <section className="cashier-no-print grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <section className="cashier-no-print grid grid-cols-2 gap-3 lg:grid-cols-5">
       {items.map((item) => {
         const Icon = item.icon;
         return (

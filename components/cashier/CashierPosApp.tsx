@@ -19,13 +19,13 @@ import { getBillTotals, getShiftSummary } from "@/lib/cashierCalculations";
 import { formatCurrency } from "@/lib/formatCurrency";
 import { getSupabaseErrorInfo } from "@/lib/supabaseError";
 import { createClient } from "@/lib/supabase/client";
-import { getCashierTables } from "@/services/cashierService";
+import { getCashierDailyKpis, getCashierTables } from "@/services/cashierService";
 import { closeCashShift, getExpectedCashForShift, getOpenCashShift, openCashShift } from "@/services/financeService";
 import { getMenuCatalog } from "@/services/menuService";
 import { createRestaurantOrder } from "@/services/orderService";
 import { applyOrderDiscount, closePaidTable, recordTablePayment } from "@/services/paymentService";
 import type { UserSession } from "@/types/auth";
-import type { CashierOrder, CashierTable, DiscountData, PaymentRecord } from "@/types/cashier";
+import type { CashierDailyKpis, CashierOrder, CashierTable, DiscountData, PaymentRecord } from "@/types/cashier";
 import type { CashShift, ExpectedCashBreakdown } from "@/types/finance";
 import type { MenuItem, OrderItem } from "@/types/pos";
 
@@ -201,6 +201,7 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
   const [addOrderItems, setAddOrderItems] = useState<OrderItem[]>([]);
   const [isSendingAdditionalOrder, setIsSendingAdditionalOrder] = useState(false);
   const [paymentSubmittingOrderId, setPaymentSubmittingOrderId] = useState<string | null>(null);
+  const [dailyKpis, setDailyKpis] = useState<CashierDailyKpis>({ salesToday: 0, tipsToday: 0, paidInvoicesToday: 0 });
   const [cashShift, setCashShift] = useState<CashShift | null>(null);
   const [cashShiftExpected, setCashShiftExpected] = useState<ExpectedCashBreakdown | null>(null);
   const [openingCash, setOpeningCash] = useState("");
@@ -232,8 +233,9 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
   }
 
   const reloadTables = useCallback(async () => {
-    const nextTables = await getCashierTables();
+    const [nextTables, nextDailyKpis] = await Promise.all([getCashierTables(), getCashierDailyKpis()]);
     setTables(nextTables);
+    setDailyKpis(nextDailyKpis);
     setSelectedTableId(
       (currentId) =>
         nextTables.find((table) => table.id === currentId)?.id ??
@@ -256,7 +258,7 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
 
     async function loadData() {
       try {
-        const [nextTables, catalog, nextShift] = await Promise.all([getCashierTables(), getMenuCatalog(), getOpenCashShift()]);
+        const [nextTables, nextDailyKpis, catalog, nextShift] = await Promise.all([getCashierTables(), getCashierDailyKpis(), getMenuCatalog(), getOpenCashShift()]);
         const nextExpected = nextShift ? await getExpectedCashForShift(nextShift.id) : null;
 
         if (!isMounted) {
@@ -264,6 +266,7 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
         }
 
         setTables(nextTables);
+        setDailyKpis(nextDailyKpis);
         setMenuItems(catalog.menuItems);
         setCashShift(nextShift);
         setCashShiftExpected(nextExpected);
@@ -334,7 +337,11 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
       .channel("cashier-order-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, scheduleReload)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_status_events" }, scheduleReload)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_item_status_events" }, scheduleReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "table_sessions" }, scheduleReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, scheduleReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "payment_tips" }, scheduleReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "restaurant_tables" }, scheduleReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "cash_shifts" }, scheduleShiftReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "cash_movements" }, scheduleShiftReload)
@@ -439,12 +446,13 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
 
     return {
       openTables: summary.openTables,
-      paidInvoices: summary.paidInvoices,
-      sales: summary.totalSales,
+      paidInvoices: dailyKpis.paidInvoicesToday,
+      sales: dailyKpis.salesToday,
+      tips: dailyKpis.tipsToday,
       unpaid,
       summary,
     };
-  }, [tablesWithUnreadAdditions]);
+  }, [dailyKpis.paidInvoicesToday, dailyKpis.salesToday, dailyKpis.tipsToday, tablesWithUnreadAdditions]);
 
   function selectTable(table: CashierTable) {
     if (!table.order) {
@@ -528,10 +536,12 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
         {
           method: payment.method,
           amount: payment.amount,
+          tipAmount: payment.tipAmount,
           reference: payment.reference,
         },
       ]);
       await reloadTables();
+      await reloadCashShift();
       showMessage("تم تسجيل الدفع بنجاح");
       return true;
     } catch (error) {
@@ -708,8 +718,11 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
         session={session}
         soundEnabled={notifications.soundEnabled}
         soundNeedsActivation={notifications.soundNeedsActivation}
+        audioState={notifications.audioState}
+        lastTestStatus={notifications.lastTestStatus}
         awaitingPaymentCount={notifications.badges.cashierAwaitingPayment}
         onToggleSound={notifications.toggleSound}
+        onTestSound={notifications.testSound}
         onOpenShiftSummary={() => setIsShiftOpen(true)}
       />
 
@@ -719,6 +732,7 @@ export function CashierPosApp({ session }: CashierPosAppProps) {
             openTables={stats.openTables}
             paidInvoices={stats.paidInvoices}
             sales={stats.sales}
+            tips={stats.tips}
             unpaid={stats.unpaid}
           />
           <CashierShiftPanel

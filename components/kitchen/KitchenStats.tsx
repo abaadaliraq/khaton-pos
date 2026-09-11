@@ -20,12 +20,12 @@ export function KitchenStats({ newCount, preparingCount, readyCount, lateCount }
       {stats.map((stat) => {
         const Icon = stat.icon;
         return (
-          <article key={stat.label} className="rounded-lg border border-white/10 bg-[#24211E] p-3">
+          <article key={stat.label} className="rounded-lg border border-[#E1D3C2] bg-white p-3 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-[#C9BEB2]">{stat.label}</span>
+              <span className="text-sm font-bold text-[#6F6258]">{stat.label}</span>
               <Icon style={{ color: stat.color }} size={20} />
             </div>
-            <p className="mt-2 text-2xl font-semibold text-[#FFF8EE]">{stat.value}</p>
+            <p className="mt-2 text-2xl font-black text-[#2C211D]">{stat.value}</p>
           </article>
         );
       })}

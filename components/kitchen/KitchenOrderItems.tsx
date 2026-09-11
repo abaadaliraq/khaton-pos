@@ -12,9 +12,9 @@ const itemStatusLabels: Record<KitchenOrderItem["status"], string> = {
 };
 
 const itemStatusClasses: Record<KitchenOrderItem["status"], string> = {
-  submitted: "border-[#C9BEB2]/25 bg-[#C9BEB2]/10 text-[#E6DDD3]",
-  preparing: "border-[#D88A3D]/30 bg-[#D88A3D]/10 text-[#f3c68d]",
-  ready: "border-[#3E8B65]/35 bg-[#3E8B65]/15 text-[#9ed6b9]",
+  submitted: "border-[#D8C8B7] bg-[#F7F1E8] text-[#5A4A42]",
+  preparing: "border-[#D88A3D]/45 bg-[#FFF1DF] text-[#8B4A16]",
+  ready: "border-[#2F7D57]/35 bg-[#EAF6EF] text-[#205C3F]",
 };
 
 export function KitchenOrderItems({ items, limit }: KitchenOrderItemsProps) {
@@ -24,20 +24,20 @@ export function KitchenOrderItems({ items, limit }: KitchenOrderItemsProps) {
   return (
     <div className="space-y-2">
       {visibleItems.map((item) => (
-        <div key={item.id} className="rounded-lg bg-[#171513] p-3">
+        <div key={item.id} className="rounded-lg border border-[#E1D3C2] bg-[#FFFDF9] p-3">
           <div className="flex items-start gap-3">
-            <span className="rounded-md bg-[#D88A3D] px-2 py-1 text-lg font-semibold text-[#171513]">
+            <span className="rounded-md bg-[#B94B43] px-2 py-1 text-lg font-black text-white">
               {item.quantity} ×
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-lg font-medium text-[#FFF8EE]">{item.name}</p>
+                <p className="text-lg font-bold text-[#2C211D]">{item.name}</p>
                 <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${itemStatusClasses[item.status]}`}>
                   {itemStatusLabels[item.status]}
                 </span>
               </div>
               {item.note ? (
-                <p className="mt-2 rounded-md border border-[#D88A3D]/25 bg-[#D88A3D]/10 px-2 py-1 text-sm text-[#f3c68d]">
+                <p className="mt-2 rounded-md border border-[#D88A3D]/35 bg-[#FFF1DF] px-2 py-1 text-sm font-semibold text-[#8B4A16]">
                   ملاحظة: {item.note}
                 </p>
               ) : null}
@@ -45,7 +45,7 @@ export function KitchenOrderItems({ items, limit }: KitchenOrderItemsProps) {
           </div>
         </div>
       ))}
-      {remaining > 0 ? <p className="text-sm text-[#D88A3D]">عرض باقي الأصناف: {remaining}</p> : null}
+      {remaining > 0 ? <p className="text-sm font-bold text-[#B94B43]">عرض باقي الأصناف: {remaining}</p> : null}
     </div>
   );
 }

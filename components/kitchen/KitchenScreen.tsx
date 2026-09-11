@@ -134,6 +134,9 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
       .channel("kitchen-order-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, scheduleRefresh)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_status_events" }, scheduleRefresh)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_item_status_events" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "table_sessions" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_requisitions" }, () => {
         refreshRequisitions().catch((error) => {
           console.error("Failed to refresh kitchen requisitions after realtime change", error);
@@ -230,12 +233,18 @@ export function KitchenScreen({ session }: KitchenScreenProps) {
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#171513] text-[#FFF8EE]">
+    <div dir="rtl" className="min-h-screen bg-[#F7F1E8] text-[#2C211D]">
       <KitchenHeader
         session={session}
         onOpenMaterialRequest={() => setIsMaterialRequestOpen(true)}
         onOpenWaste={() => setIsWasteDialogOpen(true)}
         onOpenCompleted={() => setIsCompletedOpen(true)}
+        soundEnabled={notifications.soundEnabled}
+        soundNeedsActivation={notifications.soundNeedsActivation}
+        audioState={notifications.audioState}
+        lastTestStatus={notifications.lastTestStatus}
+        onToggleSound={notifications.toggleSound}
+        onTestSound={notifications.testSound}
         onAddDemoOrder={refreshFromDatabase}
         onResetDemoData={refreshFromDatabase}
       />

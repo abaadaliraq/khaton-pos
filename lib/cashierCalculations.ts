@@ -103,12 +103,14 @@ export function getShiftSummary(tables: CashierTable[]): ShiftSummary {
 
     return total;
   }, 0);
+  const tips = paidOrders.flatMap((order) => order.payments).reduce((total, payment) => total + (payment.tipAmount ?? 0), 0);
 
   return {
     cashSales,
     cardSales,
     transferSales,
     totalSales: cashSales + cardSales + transferSales,
+    tips,
     paidInvoices: tables.filter((table) => table.status === "paid").length,
     openTables: tables.filter((table) => table.status === "occupied" || table.status === "waiting_payment").length,
   };

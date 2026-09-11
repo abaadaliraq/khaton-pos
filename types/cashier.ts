@@ -16,6 +16,8 @@ export type PaymentRecord = {
   amount: number;
   receivedAmount?: number;
   changeAmount?: number;
+  tipAmount?: number;
+  tipDisposition?: "return_change" | "tip";
   reference?: string;
   createdAt: string;
 };
@@ -67,8 +69,15 @@ export type ShiftSummary = {
   cardSales: number;
   transferSales: number;
   totalSales: number;
+  tips: number;
   paidInvoices: number;
   openTables: number;
+};
+
+export type CashierDailyKpis = {
+  salesToday: number;
+  tipsToday: number;
+  paidInvoicesToday: number;
 };
 
 export type BillTotals = {

@@ -226,6 +226,30 @@ export type CustomerPayment = {
   createdAt: string;
 };
 
+export type PaymentTip = {
+  id: string;
+  paymentId: string;
+  orderId: string;
+  orderNumber: number | null;
+  tableSessionId: string | null;
+  cashShiftId: string | null;
+  tableNumber: number | null;
+  invoiceAmount: number;
+  amount: number;
+  method: ExpensePaymentMethod;
+  createdBy: string | null;
+  createdByName?: string;
+  createdAt: string;
+};
+
+export type TipsSummary = {
+  todayTotal: number;
+  weekTotal: number;
+  byShift: { shiftId: string; cashierName: string; total: number }[];
+  byDate: { date: string; total: number }[];
+  latestTips: PaymentTip[];
+};
+
 export type FinanceOpenOrdersSummary = {
   count: number;
   total: number;
@@ -234,6 +258,7 @@ export type FinanceOpenOrdersSummary = {
 export type FinanceSalesSummary = {
   salesToday: number;
   receivedToday: number;
+  tipsToday: number;
   openOrders: FinanceOpenOrdersSummary;
   customerPaymentsToday: CustomerPayment[];
 };
@@ -309,11 +334,13 @@ export type ExpectedCashBreakdown = {
   cutoffAt: string;
   openingCash: number;
   cashSales: number;
+  cashTips: number;
   cashExpenses: number;
   cashSupplierPayments: number;
   expectedCash: number;
   sources: {
     cashSalesAvailable: boolean;
+    cashTipsAvailable: boolean;
     cashExpensesAvailable: boolean;
     cashSupplierPaymentsAvailable: boolean;
   };

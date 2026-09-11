@@ -192,37 +192,54 @@ function ActivityChart({ data }: { data: ActivityPoint[] }) {
 }
 
 function AuditTable({ logs }: { logs: AuditLog[] }) {
+  const [visibleCount, setVisibleCount] = useState(8);
+  const visibleLogs = logs.slice(0, visibleCount);
+
   return (
     <section className="overflow-hidden rounded-md border border-[#e4d8c8] bg-white shadow-sm">
-      <div className="border-b border-[#eee4d8] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#eee4d8] p-4">
         <h2 className="font-semibold text-[#2f211c]">آخر العمليات</h2>
+        <span className="text-xs font-semibold text-[#7c6b60]">آخر {formatNumber(logs.length)} عملية محملة</span>
       </div>
       {logs.length === 0 ? <div className="p-4"><EmptyPanel message="لا توجد عمليات مسجلة حالياً." /></div> : null}
       {logs.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-right text-sm">
-            <thead className="bg-[#f5eee6] text-[#4a3b34]">
-              <tr>
-                <th className="px-3 py-3 font-semibold">المستخدم</th>
-                <th className="px-3 py-3 font-semibold">الدور</th>
-                <th className="px-3 py-3 font-semibold">العملية</th>
-                <th className="px-3 py-3 font-semibold">القسم</th>
-                <th className="px-3 py-3 font-semibold">الوقت</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#eee4d8]">
-              {logs.map((log) => (
-                <tr key={log.id} className="hover:bg-[#fffaf4]">
-                  <td className="px-3 py-3 font-medium text-[#2f211c]">{log.user?.fullName ?? log.user?.username ?? "النظام"}</td>
-                  <td className="px-3 py-3 text-[#4a3b34]">{log.user ? roleLabels[log.user.role] ?? log.user.role : "-"}</td>
-                  <td className="px-3 py-3 text-[#4a3b34]">{actionLabel(log.action)}</td>
-                  <td className="px-3 py-3 text-[#4a3b34]">{sectionLabel(log.entityType)}</td>
-                  <td className="px-3 py-3 text-[#7c6b60]">{formatDateTime(log.createdAt)}</td>
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] border-collapse text-right text-sm">
+              <thead className="bg-[#f5eee6] text-[#4a3b34]">
+                <tr>
+                  <th className="border border-[#eee4d8] px-3 py-3 font-semibold">المستخدم</th>
+                  <th className="border border-[#eee4d8] px-3 py-3 font-semibold">الدور</th>
+                  <th className="border border-[#eee4d8] px-3 py-3 font-semibold">العملية</th>
+                  <th className="border border-[#eee4d8] px-3 py-3 font-semibold">القسم</th>
+                  <th className="border border-[#eee4d8] px-3 py-3 font-semibold">الوقت</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {visibleLogs.map((log) => (
+                  <tr key={log.id} className="odd:bg-white even:bg-[#fffaf4] hover:bg-[#f8efe4]">
+                    <td className="border border-[#eee4d8] px-3 py-3 font-medium text-[#2f211c]">{log.user?.fullName ?? log.user?.username ?? "النظام"}</td>
+                    <td className="border border-[#eee4d8] px-3 py-3 text-[#4a3b34]">{log.user ? roleLabels[log.user.role] ?? log.user.role : "-"}</td>
+                    <td className="border border-[#eee4d8] px-3 py-3 text-[#4a3b34]">{actionLabel(log.action)}</td>
+                    <td className="border border-[#eee4d8] px-3 py-3 text-[#4a3b34]">{sectionLabel(log.entityType)}</td>
+                    <td className="border border-[#eee4d8] px-3 py-3 text-[#7c6b60]">{formatDateTime(log.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {visibleCount < logs.length ? (
+            <div className="border-t border-[#eee4d8] bg-[#fbfaf7] p-3 text-center">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((current) => Math.min(logs.length, current + 8))}
+                className="rounded-md bg-[#B94B43] px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-[#9f3f38]"
+              >
+                تحميل المزيد
+              </button>
+            </div>
+          ) : null}
+        </>
       ) : null}
     </section>
   );
@@ -290,7 +307,7 @@ export default function AdminPage() {
         setOccupiedTableCount(occupiedTables.length);
         setAvailableTableCount(availableTables.length);
         setDisabledTableCount(disabledTables.length);
-        setAuditLogs(logs.slice(0, 10));
+        setAuditLogs(logs.slice(0, 30));
         setActivityPoints(days.map((day) => ({ date: day, count: countsByDate.get(day) ?? 0 })));
         setErrorMessage("");
       } catch (error) {

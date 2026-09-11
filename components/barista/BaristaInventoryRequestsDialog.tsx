@@ -38,11 +38,11 @@ function formatQuantity(quantity: number | undefined, unitCode: InventoryUnitCod
 }
 
 function statusTone(status: InventoryRequisitionStatus) {
-  if (status === "pending") return "border-amber-300/40 bg-amber-400/10 text-amber-100";
-  if (status === "approved") return "border-sky-300/40 bg-sky-400/10 text-sky-100";
-  if (status === "issued") return "border-[#D88A3D]/45 bg-[#D88A3D]/15 text-[#f3c68d]";
-  if (status === "received") return "border-emerald-300/40 bg-emerald-400/10 text-emerald-100";
-  return "border-rose-300/40 bg-rose-400/10 text-rose-100";
+  if (status === "pending") return "border-amber-300 bg-amber-50 text-amber-800";
+  if (status === "approved") return "border-sky-300 bg-sky-50 text-sky-800";
+  if (status === "issued") return "border-[#D88A3D]/55 bg-[#FFF1DF] text-[#8B4A16]";
+  if (status === "received") return "border-emerald-300 bg-emerald-50 text-emerald-800";
+  return "border-rose-300 bg-rose-50 text-rose-800";
 }
 
 export function BaristaInventoryRequestsDialog({ isOpen, onClose, onChanged }: BaristaInventoryRequestsDialogProps) {
@@ -131,91 +131,91 @@ export function BaristaInventoryRequestsDialog({ isOpen, onClose, onChanged }: B
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4">
-      <section className="w-full max-w-6xl rounded-lg border border-white/10 bg-[#24211E] p-4 text-[#FFF8EE] shadow-2xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 p-4">
+      <section className="w-full max-w-6xl rounded-lg border border-[#E1D3C2] bg-white p-4 text-[#2C211D] shadow-2xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E1D3C2] pb-3">
           <div className="flex items-center gap-2">
             <ClipboardList size={19} className="text-[#D88A3D]" />
             <div>
-              <h2 className="font-semibold">طلباتي من المخزن</h2>
-              <p className="mt-1 text-xs text-[#C9BEB2]">طلبات الباريستا ومتابعة الصرف والاستلام</p>
+              <h2 className="font-black">طلباتي من المخزن</h2>
+              <p className="mt-1 text-xs font-semibold text-[#6F6258]">طلبات الباريستا ومتابعة الصرف والاستلام</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {pendingReceiptCount > 0 ? <span className="rounded-full bg-[#D88A3D] px-3 py-1 text-xs font-bold text-[#171513]">{formatNumber(pendingReceiptCount)} بانتظار الاستلام</span> : null}
-            <button type="button" onClick={() => void load()} className="rounded-lg border border-white/10 p-2 text-[#C9BEB2] hover:bg-[#302B27]" aria-label="تحديث">
+            {pendingReceiptCount > 0 ? <span className="rounded-full bg-[#B94B43] px-3 py-1 text-xs font-bold text-white">{formatNumber(pendingReceiptCount)} بانتظار الاستلام</span> : null}
+            <button type="button" onClick={() => void load()} className="rounded-lg border border-[#D8C8B7] bg-[#FFFDF9] p-2 text-[#2C211D] hover:bg-[#F1E6D8]" aria-label="تحديث">
               <RefreshCw size={17} />
             </button>
-            <button type="button" onClick={onClose} className="rounded-lg border border-white/10 p-2 text-[#C9BEB2] hover:bg-[#302B27]" aria-label="إغلاق">
+            <button type="button" onClick={onClose} className="rounded-lg border border-[#D8C8B7] bg-[#FFFDF9] p-2 text-[#2C211D] hover:bg-[#F1E6D8]" aria-label="إغلاق">
               <X size={17} />
             </button>
           </div>
         </div>
 
-        {error ? <p className="mt-3 rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">{error}</p> : null}
-        {isLoading ? <p className="mt-4 text-sm text-[#C9BEB2]">جارٍ تحميل الطلبات...</p> : null}
+        {error ? <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-800">{error}</p> : null}
+        {isLoading ? <p className="mt-4 text-sm font-bold text-[#6F6258]">جارٍ تحميل الطلبات...</p> : null}
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
-          <div className="overflow-x-auto rounded-lg border border-white/10">
+          <div className="overflow-x-auto rounded-lg border border-[#E1D3C2]">
             <table className="w-full min-w-[820px] table-fixed border-collapse text-xs">
-              <thead className="bg-[#171513] text-[#FFF8EE]">
+              <thead className="bg-[#F2E7D9] text-[#2C211D]">
                 <tr>
-                  <th className="border-l border-white/10 px-3 py-2 text-right">رقم الطلب</th>
-                  <th className="border-l border-white/10 px-3 py-2 text-right">التاريخ</th>
-                  <th className="border-l border-white/10 px-3 py-2 text-right">عدد المواد</th>
-                  <th className="border-l border-white/10 px-3 py-2 text-right">الحالة</th>
-                  <th className="border-l border-white/10 px-3 py-2 text-right">المعتمد</th>
-                  <th className="border-l border-white/10 px-3 py-2 text-right">الصرف</th>
+                  <th className="border-l border-[#E1D3C2] px-3 py-2 text-right">رقم الطلب</th>
+                  <th className="border-l border-[#E1D3C2] px-3 py-2 text-right">التاريخ</th>
+                  <th className="border-l border-[#E1D3C2] px-3 py-2 text-right">عدد المواد</th>
+                  <th className="border-l border-[#E1D3C2] px-3 py-2 text-right">الحالة</th>
+                  <th className="border-l border-[#E1D3C2] px-3 py-2 text-right">المعتمد</th>
+                  <th className="border-l border-[#E1D3C2] px-3 py-2 text-right">الصرف</th>
                   <th className="px-3 py-2 text-right">الاستلام</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/10">
+              <tbody>
                 {requisitions.map((requisition) => (
-                  <tr key={requisition.id} onClick={() => setSelectedId(requisition.id)} className={`cursor-pointer hover:bg-[#302B27] ${selected?.id === requisition.id ? "bg-[#302B27]" : "bg-[#24211E]"}`}>
-                    <td className="border-l border-white/10 px-3 py-2 font-semibold" dir="ltr">{requisition.requestCode}</td>
-                    <td className="border-l border-white/10 px-3 py-2 text-[#C9BEB2]">{formatDateTime(requisition.requestedAt)}</td>
-                    <td className="border-l border-white/10 px-3 py-2">{formatNumber(requisition.items.length)}</td>
-                    <td className="border-l border-white/10 px-3 py-2"><span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${statusTone(requisition.status)}`}>{statusLabels[requisition.status]}</span></td>
-                    <td className="border-l border-white/10 px-3 py-2 text-[#C9BEB2]">{requisition.approvedByName ?? "-"}</td>
-                    <td className="border-l border-white/10 px-3 py-2 text-[#C9BEB2]">{formatDateTime(requisition.issuedAt)}</td>
-                    <td className="px-3 py-2 text-[#C9BEB2]">{formatDateTime(requisition.receivedAt)}</td>
+                  <tr key={requisition.id} onClick={() => setSelectedId(requisition.id)} className={`cursor-pointer border-b border-[#E1D3C2] hover:bg-[#F7F1E8] ${selected?.id === requisition.id ? "bg-[#F2E7D9]" : "bg-white"}`}>
+                    <td className="border-l border-[#E1D3C2] px-3 py-2 font-bold" dir="ltr">{requisition.requestCode}</td>
+                    <td className="border-l border-[#E1D3C2] px-3 py-2 font-semibold text-[#5A4A42]">{formatDateTime(requisition.requestedAt)}</td>
+                    <td className="border-l border-[#E1D3C2] px-3 py-2 font-semibold">{formatNumber(requisition.items.length)}</td>
+                    <td className="border-l border-[#E1D3C2] px-3 py-2"><span className={`rounded-full border px-2 py-1 text-[11px] font-bold ${statusTone(requisition.status)}`}>{statusLabels[requisition.status]}</span></td>
+                    <td className="border-l border-[#E1D3C2] px-3 py-2 font-semibold text-[#5A4A42]">{requisition.approvedByName ?? "-"}</td>
+                    <td className="border-l border-[#E1D3C2] px-3 py-2 font-semibold text-[#5A4A42]">{formatDateTime(requisition.issuedAt)}</td>
+                    <td className="px-3 py-2 font-semibold text-[#5A4A42]">{formatDateTime(requisition.receivedAt)}</td>
                   </tr>
                 ))}
                 {!isLoading && requisitions.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-sm text-[#C9BEB2]">لا توجد طلبات مواد للباريستا.</td>
+                    <td colSpan={7} className="px-3 py-8 text-center text-sm font-bold text-[#6F6258]">لا توجد طلبات مواد للباريستا.</td>
                   </tr>
                 ) : null}
               </tbody>
             </table>
           </div>
 
-          <section className="rounded-lg border border-white/10 bg-[#171513] p-3">
-            {!selected ? <p className="text-sm text-[#C9BEB2]">اختر طلباً لعرض التفاصيل.</p> : null}
+          <section className="rounded-lg border border-[#E1D3C2] bg-[#FFFDF9] p-3">
+            {!selected ? <p className="text-sm font-bold text-[#6F6258]">اختر طلباً لعرض التفاصيل.</p> : null}
             {selected ? (
               <div>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <h3 className="font-semibold">{selected.requestCode}</h3>
-                    <p className="mt-1 text-xs text-[#C9BEB2]">طلب بواسطة: {selected.requestedByName}</p>
+                    <h3 className="font-black">{selected.requestCode}</h3>
+                    <p className="mt-1 text-xs font-semibold text-[#6F6258]">طلب بواسطة: {selected.requestedByName}</p>
                   </div>
                   <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${statusTone(selected.status)}`}>{statusLabels[selected.status]}</span>
                 </div>
-                <div className="mt-3 divide-y divide-white/10">
+                <div className="mt-3 divide-y divide-[#E1D3C2]">
                   {selected.items.map((item) => (
                     <div key={item.id} className="py-2 text-sm">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium">{item.inventoryItemName}</span>
-                        <span className="text-[#C9BEB2]">{item.status}</span>
+                        <span className="font-bold">{item.inventoryItemName}</span>
+                        <span className="font-semibold text-[#6F6258]">{item.status}</span>
                       </div>
-                      <p className="mt-1 text-xs text-[#C9BEB2]">
+                      <p className="mt-1 text-xs font-semibold text-[#6F6258]">
                         مطلوب: {formatNumber(item.requestedQuantity)} {item.requestedUnitLabel} · معتمد: {item.approvedQuantityBase ? formatQuantity(item.approvedQuantityBase, item.baseUnitCode, item.baseUnitName) : "-"} · مصروف: {item.issuedQuantityBase ? formatQuantity(item.issuedQuantityBase, item.baseUnitCode, item.baseUnitName) : "-"}
                       </p>
                     </div>
                   ))}
                 </div>
                 {selected.status === "issued" ? (
-                  <button disabled={isSaving} type="button" onClick={() => void confirmReceipt(selected.id)} className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#D88A3D] text-sm font-semibold text-[#171513] disabled:opacity-60">
+                  <button disabled={isSaving} type="button" onClick={() => void confirmReceipt(selected.id)} className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#B94B43] text-sm font-bold text-white disabled:bg-[#E4D8C9] disabled:text-[#6F6258]">
                     <PackageCheck size={17} />
                     تأكيد استلام المواد
                   </button>

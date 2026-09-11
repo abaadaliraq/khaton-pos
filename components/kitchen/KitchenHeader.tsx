@@ -4,6 +4,7 @@ import { Clock, LogOut, Maximize, Minimize, PackagePlus, Trash2, Wifi } from "lu
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OperationalBrand } from "@/components/operational/OperationalBrand";
+import { SoundControls } from "@/components/operational/SoundControls";
 import { signOut } from "@/services/authService";
 import type { UserSession } from "@/types/auth";
 
@@ -14,6 +15,12 @@ type KitchenHeaderProps = {
   onOpenCompleted: () => void;
   onAddDemoOrder: () => void;
   onResetDemoData: () => void;
+  soundEnabled: boolean;
+  soundNeedsActivation: boolean;
+  audioState?: string;
+  lastTestStatus?: string;
+  onToggleSound: () => void;
+  onTestSound: () => void;
 };
 
 function getDateTime() {
@@ -40,6 +47,12 @@ export function KitchenHeader({
   onOpenCompleted,
   onAddDemoOrder,
   onResetDemoData,
+  soundEnabled,
+  soundNeedsActivation,
+  audioState,
+  lastTestStatus,
+  onToggleSound,
+  onTestSound,
 }: KitchenHeaderProps) {
   const router = useRouter();
   const [clock, setClock] = useState({ time: "", date: "" });
@@ -78,47 +91,48 @@ export function KitchenHeader({
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-white/10 bg-[#171513]">
+    <header className="sticky top-0 z-40 border-b border-[#E1D3C2] bg-[#F7F1E8] text-[#2C211D] shadow-sm">
       <div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-3 px-4 py-3">
-        <OperationalBrand title="شاشة المطبخ" subtitle="المطبخ على" meta={session.name} />
+        <OperationalBrand title="شاشة المطبخ" subtitle="المطبخ على" meta={session.name} variant="light" />
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="hidden h-11 items-center gap-2 rounded-lg border border-white/10 bg-[#24211E] px-3 text-sm text-[#FFF8EE] md:flex">
+          <div className="hidden h-11 items-center gap-2 rounded-lg border border-[#D8C8B7] bg-white px-3 text-sm text-[#2C211D] shadow-sm md:flex">
             <Clock size={17} />
             <span>{clock.time || "..."}</span>
-            <span className="text-[#C9BEB2]">{clock.date}</span>
+            <span className="text-[#6F6258]">{clock.date}</span>
           </div>
-          <span className="flex h-11 items-center gap-2 rounded-lg border border-[#3E8B65]/35 bg-[#3E8B65]/15 px-3 text-sm font-medium text-[#8de0b8]">
+          <span className="flex h-11 items-center gap-2 rounded-lg border border-[#2F7D57]/25 bg-[#EAF6EF] px-3 text-sm font-bold text-[#205C3F]">
             <Wifi size={17} />
             المطبخ متصل
           </span>
-          <button type="button" onClick={onOpenCompleted} className="h-11 rounded-lg bg-[#302B27] px-3 text-sm font-medium text-[#FFF8EE] hover:bg-[#3b3631]">
+          <SoundControls isEnabled={soundEnabled} needsActivation={soundNeedsActivation} audioState={audioState} lastTestStatus={lastTestStatus} onActivate={onToggleSound} onTest={onTestSound} />
+          <button type="button" onClick={onOpenCompleted} className="h-11 rounded-lg border border-[#D8C8B7] bg-white px-3 text-sm font-bold text-[#2C211D] shadow-sm hover:bg-[#F1E6D8]">
             الطلبات المكتملة
           </button>
-          <button type="button" onClick={onOpenMaterialRequest} className="flex h-11 items-center gap-2 rounded-lg border border-[#D88A3D]/40 bg-[#D88A3D]/15 px-3 text-sm font-semibold text-[#FFD7A8] hover:bg-[#D88A3D]/25">
+          <button type="button" onClick={onOpenMaterialRequest} className="flex h-11 items-center gap-2 rounded-lg border border-[#D8C8B7] bg-white px-3 text-sm font-bold text-[#2C211D] shadow-sm hover:bg-[#F1E6D8]">
             <PackagePlus size={17} />
             طلب مواد
           </button>
-          <button type="button" onClick={onOpenWaste} className="flex h-11 items-center gap-2 rounded-lg border border-rose-300/30 bg-rose-500/10 px-3 text-sm font-semibold text-rose-100 hover:bg-rose-500/20">
+          <button type="button" onClick={onOpenWaste} className="flex h-11 items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 text-sm font-bold text-rose-800 shadow-sm hover:bg-rose-100">
             <Trash2 size={17} />
             تسجيل هدر
           </button>
-          <button type="button" onClick={toggleFullscreen} className="flex h-11 items-center gap-2 rounded-lg bg-[#D88A3D] px-3 text-sm font-semibold text-[#171513] hover:bg-[#e29b54]">
+          <button type="button" onClick={toggleFullscreen} className="flex h-11 items-center gap-2 rounded-lg bg-[#B94B43] px-3 text-sm font-bold text-white shadow-sm hover:bg-[#9f3f38]">
             {isFullscreen ? <Minimize size={17} /> : <Maximize size={17} />}
             {isFullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"}
           </button>
-          <button type="button" onClick={logout} className="flex h-11 items-center gap-2 rounded-lg border border-white/10 bg-[#24211E] px-3 text-sm text-[#FFF8EE] hover:bg-[#302B27]">
+          <button type="button" onClick={logout} className="flex h-11 items-center gap-2 rounded-lg border border-[#D8C8B7] bg-white px-3 text-sm font-bold text-[#2C211D] shadow-sm hover:bg-[#F1E6D8]">
             <LogOut size={17} />
             خروج
           </button>
         </div>
       </div>
       <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-2 px-4 pb-3">
-        <span className="text-xs text-[#C9BEB2]">أدوات التجربة</span>
-        <button type="button" onClick={onAddDemoOrder} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-[#FFF8EE] hover:bg-[#24211E]">
+        <span className="text-xs font-bold text-[#6F6258]">أدوات التجربة</span>
+        <button type="button" onClick={onAddDemoOrder} className="rounded-lg border border-[#D8C8B7] bg-white px-3 py-2 text-xs font-bold text-[#2C211D] hover:bg-[#F1E6D8]">
           إضافة طلب تجريبي
         </button>
-        <button type="button" onClick={onResetDemoData} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-[#FFF8EE] hover:bg-[#24211E]">
+        <button type="button" onClick={onResetDemoData} className="rounded-lg border border-[#D8C8B7] bg-white px-3 py-2 text-xs font-bold text-[#2C211D] hover:bg-[#F1E6D8]">
           إعادة البيانات التجريبية
         </button>
       </div>

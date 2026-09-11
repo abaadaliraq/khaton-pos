@@ -19,6 +19,8 @@ import type {
   ExpensePaymentMethod,
   FinanceSalesSummary,
   OpenCashShiftInput,
+  PaymentTip,
+  TipsSummary,
 } from "@/types/finance";
 
 type ExpenseRow = {
@@ -50,6 +52,27 @@ type CustomerPaymentRow = {
   order: {
     order_number: number | null;
     table: { table_number: number | null } | null;
+  } | null;
+};
+
+type PaymentTipRow = {
+  id: string;
+  payment_id: string;
+  order_id: string;
+  table_session_id: string | null;
+  cash_shift_id: string | null;
+  amount: number | string;
+  method: ExpensePaymentMethod;
+  created_by: string | null;
+  created_at: string;
+  created_by_profile: { full_name: string | null; username: string | null } | null;
+  cash_shift: { cashier_profile: { full_name: string | null; username: string | null } | null } | null;
+  payment: {
+    amount: number | string;
+    order: {
+      order_number: number | null;
+      table: { table_number: number | null } | null;
+    } | null;
   } | null;
 };
 
@@ -109,11 +132,13 @@ type ExpectedCashBreakdownPayload = {
   cutoffAt?: string;
   openingCash?: number | string;
   cashSales?: number | string;
+  cashTips?: number | string;
   cashExpenses?: number | string;
   cashSupplierPayments?: number | string;
   expectedCash?: number | string;
   sources?: {
     cashSalesAvailable?: boolean;
+    cashTipsAvailable?: boolean;
     cashExpensesAvailable?: boolean;
     cashSupplierPaymentsAvailable?: boolean;
   };
@@ -126,6 +151,7 @@ type CloseCashShiftPayload = {
 
 const expenseSelect = "id, expense_number, amount, category, expense_date, payment_method, receipt_number, description, notes, created_by, created_at, created_by_profile:profiles!expenses_created_by_fkey(full_name, username)";
 const customerPaymentSelect = "id, order_id, amount, method, status, created_at, order:orders(order_number, table:restaurant_tables(table_number))";
+const paymentTipSelect = "id, payment_id, order_id, table_session_id, cash_shift_id, amount, method, created_by, created_at, created_by_profile:profiles!payment_tips_created_by_fkey(full_name, username), cash_shift:cash_shifts(cashier_profile:profiles!cash_shifts_cashier_id_fkey(full_name, username)), payment:payments(amount, order:orders(order_number, table:restaurant_tables(table_number)))";
 const profileNameSelect = "full_name, username";
 const cashShiftSelect = `id, cashier_id, business_date, opened_at, closed_at, opening_cash, counted_cash, expected_cash_snapshot, cash_difference, status, opening_note, closing_note, opened_by, closed_by, created_at,
   cashier_profile:profiles!cash_shifts_cashier_id_fkey(${profileNameSelect}),
@@ -217,6 +243,24 @@ function rowToCashMovement(row: CashMovementRow): CashShiftMovement {
   };
 }
 
+function rowToPaymentTip(row: PaymentTipRow): PaymentTip {
+  return {
+    id: row.id,
+    paymentId: row.payment_id,
+    orderId: row.order_id,
+    orderNumber: row.payment?.order?.order_number ?? null,
+    tableSessionId: row.table_session_id,
+    cashShiftId: row.cash_shift_id,
+    tableNumber: row.payment?.order?.table?.table_number ?? null,
+    invoiceAmount: asAmount(row.payment?.amount ?? 0),
+    amount: asAmount(row.amount),
+    method: row.method,
+    createdBy: row.created_by,
+    createdByName: profileName(row.created_by_profile),
+    createdAt: row.created_at,
+  };
+}
+
 function payloadToExpectedCashBreakdown(payload: ExpectedCashBreakdownPayload): ExpectedCashBreakdown {
   return {
     shiftId: payload.shiftId ?? "",
@@ -225,11 +269,13 @@ function payloadToExpectedCashBreakdown(payload: ExpectedCashBreakdownPayload): 
     cutoffAt: payload.cutoffAt ?? "",
     openingCash: asAmount(payload.openingCash ?? 0),
     cashSales: asAmount(payload.cashSales ?? 0),
+    cashTips: asAmount(payload.cashTips ?? 0),
     cashExpenses: asAmount(payload.cashExpenses ?? 0),
     cashSupplierPayments: asAmount(payload.cashSupplierPayments ?? 0),
     expectedCash: asAmount(payload.expectedCash ?? 0),
     sources: {
       cashSalesAvailable: payload.sources?.cashSalesAvailable === true,
+      cashTipsAvailable: payload.sources?.cashTipsAvailable === true,
       cashExpensesAvailable: payload.sources?.cashExpensesAvailable === true,
       cashSupplierPaymentsAvailable: payload.sources?.cashSupplierPaymentsAvailable === true,
     },
@@ -299,6 +345,7 @@ export async function getFinanceSalesSummary(): Promise<FinanceSalesSummary> {
 
   const [
     { data: customerPayments, error: customerPaymentsError },
+    { data: paymentTips, error: paymentTipsError },
     { data: openOrders, error: openOrdersError },
   ] = await Promise.all([
     supabase
@@ -310,6 +357,12 @@ export async function getFinanceSalesSummary(): Promise<FinanceSalesSummary> {
       .order("created_at", { ascending: false })
       .limit(50),
     supabase
+      .from("payment_tips" as never)
+      .select("amount, created_at")
+      .gte("created_at", start)
+      .lt("created_at", end)
+      .limit(5000),
+    supabase
       .from("orders")
       .select("total")
       .in("status", ["submitted", "preparing", "ready", "awaiting_payment"]),
@@ -318,6 +371,11 @@ export async function getFinanceSalesSummary(): Promise<FinanceSalesSummary> {
   if (customerPaymentsError) {
     logSupabaseError("[finance customer payments SELECT]", customerPaymentsError);
     throw customerPaymentsError;
+  }
+
+  if (paymentTipsError) {
+    logSupabaseError("[finance payment tips SELECT]", paymentTipsError);
+    throw paymentTipsError;
   }
 
   if (openOrdersError) {
@@ -340,11 +398,59 @@ export async function getFinanceSalesSummary(): Promise<FinanceSalesSummary> {
   return {
     salesToday: completedPaymentsTotal,
     receivedToday: completedPaymentsTotal,
+    tipsToday: ((paymentTips ?? []) as unknown as { amount: number | string }[]).reduce((total, tip) => total + asAmount(tip.amount), 0),
     openOrders: {
       count: ((openOrders ?? []) as unknown as OpenOrderRow[]).length,
       total: ((openOrders ?? []) as unknown as OpenOrderRow[]).reduce((total, order) => total + asAmount(order.total), 0),
     },
     customerPaymentsToday: mappedPayments,
+  };
+}
+
+export async function getPaymentTips(limit = 100): Promise<PaymentTip[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("payment_tips" as never)
+    .select(paymentTipSelect)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    logSupabaseError("[payment tips SELECT]", error);
+    throw error;
+  }
+
+  return ((data ?? []) as unknown as PaymentTipRow[]).map(rowToPaymentTip);
+}
+
+export async function getTipsSummary(limit = 100): Promise<TipsSummary> {
+  const tips = await getPaymentTips(limit);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baghdad" }).format(new Date());
+  const weekStartDate = new Date();
+  weekStartDate.setUTCDate(weekStartDate.getUTCDate() - 6);
+  const weekStart = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baghdad" }).format(weekStartDate);
+  const byShift = new Map<string, { shiftId: string; cashierName: string; total: number }>();
+  const byDate = new Map<string, { date: string; total: number }>();
+
+  for (const tip of tips) {
+    const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baghdad" }).format(new Date(tip.createdAt));
+    const dateSummary = byDate.get(dateKey) ?? { date: dateKey, total: 0 };
+    dateSummary.total += tip.amount;
+    byDate.set(dateKey, dateSummary);
+
+    if (tip.cashShiftId) {
+      const shiftSummary = byShift.get(tip.cashShiftId) ?? { shiftId: tip.cashShiftId, cashierName: tip.createdByName ?? "وردية غير معروفة", total: 0 };
+      shiftSummary.total += tip.amount;
+      byShift.set(tip.cashShiftId, shiftSummary);
+    }
+  }
+
+  return {
+    todayTotal: tips.filter((tip) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baghdad" }).format(new Date(tip.createdAt)) === today).reduce((total, tip) => total + tip.amount, 0),
+    weekTotal: tips.filter((tip) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baghdad" }).format(new Date(tip.createdAt)) >= weekStart).reduce((total, tip) => total + tip.amount, 0),
+    byShift: Array.from(byShift.values()),
+    byDate: Array.from(byDate.values()).sort((first, second) => second.date.localeCompare(first.date)),
+    latestTips: tips.slice(0, 20),
   };
 }
 

@@ -58,6 +58,17 @@ export type OperationalBadgeCounts = {
 
 type LegacyOperationalEventType = "new-order" | "order-ready" | "table-awaiting-payment";
 type OrderStatusEventRow = Database["public"]["Tables"]["order_status_events"]["Row"];
+type OrderItemStatusEventRow = {
+  id: string;
+  order_id: string;
+  order_item_id: string;
+  preparation_station: PreparationStation;
+  from_status: string | null;
+  to_status: string;
+  changed_by: string | null;
+  notes: string | null;
+  created_at: string;
+};
 
 type UseOperationalNotificationsOptions = {
   role: OperationalRole;
@@ -81,11 +92,10 @@ const emptyBadges: OperationalBadgeCounts = {
   ownerCashDifferences: 0,
 };
 
-const soundSources = {
-  new: "/sounds/new-order.mp3",
-  ready: "/sounds/order-ready.mp3",
-  warning: "/sounds/order-ready.mp3",
-};
+const soundPreferenceKey = "khatoun-operational-sound-preferred";
+let sharedAudioContext: AudioContext | null = null;
+type AudioRuntimeState = "none" | AudioContextState;
+type SoundTestStatus = "idle" | "success" | "failed";
 
 const destinationLabels: Record<InventoryRequisitionDestination, string> = {
   kitchen: "المطبخ",
@@ -130,18 +140,24 @@ function markEventHandled(key: string) {
   window.sessionStorage.setItem(storageKey(key), "1");
 }
 
-function shouldShowActivationHint(role: OperationalRole) {
-  if (typeof window === "undefined") return false;
-  const key = `khatoun-operational-audio-hint:${role}`;
-  if (window.sessionStorage.getItem(key) === "1") return false;
-  window.sessionStorage.setItem(key, "1");
-  return true;
+function soundLog(message: string, detail?: unknown) {
+  if (process.env.NODE_ENV !== "development") return;
+  if (typeof detail === "undefined") {
+    console.info(`[sound] ${message}`);
+    return;
+  }
+  console.info(`[sound] ${message}`, detail);
 }
 
 function orderEventTypeForRole(row: OrderStatusEventRow, role: OperationalRole): LegacyOperationalEventType | null {
   if (row.to_status === "submitted" && row.from_status === null && (role === "kitchen" || role === "barista")) return "new-order";
   if (row.to_status === "ready" && row.from_status !== "ready" && role === "captain") return "order-ready";
   if (row.to_status === "awaiting_payment" && row.from_status !== "awaiting_payment" && role === "cashier") return "table-awaiting-payment";
+  return null;
+}
+
+function itemEventTypeForRole(row: OrderItemStatusEventRow, role: OperationalRole): LegacyOperationalEventType | null {
+  if (row.to_status === "submitted" && row.from_status === null && ((role === "kitchen" && row.preparation_station === "kitchen") || (role === "barista" && row.preparation_station === "barista"))) return "new-order";
   return null;
 }
 
@@ -207,7 +223,7 @@ function toastFromNotification(notification: OperationalNotification, showActiva
     id: notification.id,
     title: notification.title,
     tableLabel: notification.tableLabel ?? "",
-    message: showActivationHint ? `${notification.message} · اضغط مرة واحدة لتفعيل تنبيهات النظام` : notification.message,
+    message: showActivationHint ? `${notification.message} · اضغط لتفعيل صوت التنبيهات` : notification.message,
     tone: notification.sound === "ready" ? "ready" : "new",
     actionUrl: notification.actionUrl,
   };
@@ -279,89 +295,115 @@ async function loadRoleBadges(role: OperationalRole): Promise<OperationalBadgeCo
 }
 
 export function useOperationalNotifications({ role, station, enabled = true, visualOnly, onRelevantEvent, onBadgeCountsChange }: UseOperationalNotificationsOptions) {
-  const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
+  const [audioState, setAudioState] = useState<AudioRuntimeState>(() => sharedAudioContext?.state ?? "none");
+  const [soundPreferred, setSoundPreferred] = useState(() => (typeof window !== "undefined" ? window.localStorage.getItem(soundPreferenceKey) === "true" : false));
+  const [lastTestStatus, setLastTestStatus] = useState<SoundTestStatus>("idle");
   const [toast, setToast] = useState<OperationalToastState | null>(null);
   const [badges, setBadges] = useState<OperationalBadgeCounts>(emptyBadges);
-  const audioRefs = useRef<Partial<Record<"new" | "ready" | "warning", HTMLAudioElement>>>({});
+  const audioContextRef = useRef<AudioContext | null>(null);
   const handledEventsRef = useRef(new Set<string>());
   const audioQueueRef = useRef(Promise.resolve());
   const toastTimerRef = useRef<number | null>(null);
   const reloadTimerRef = useRef<number | null>(null);
   const onRelevantEventRef = useRef(onRelevantEvent);
   const onBadgeCountsChangeRef = useRef(onBadgeCountsChange);
-  const soundEnabled = enabled && !visualOnly && role !== "owner";
+  const soundAvailable = enabled && !visualOnly && role !== "owner";
 
   useEffect(() => {
     onRelevantEventRef.current = onRelevantEvent;
     onBadgeCountsChangeRef.current = onBadgeCountsChange;
   }, [onRelevantEvent, onBadgeCountsChange]);
 
-  useEffect(() => {
-    if (!enabled || !soundEnabled) return;
-    audioRefs.current = {
-      new: new Audio(soundSources.new),
-      ready: new Audio(soundSources.ready),
-      warning: new Audio(soundSources.warning),
-    };
+  const playWebAudioBeep = useCallback(async (sound: OperationalNotification["sound"], label: string) => {
+    if (!soundAvailable || sound === "none") return false;
+    const AudioContextConstructor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
 
-    Object.values(audioRefs.current).forEach((audio) => {
-      if (!audio) return;
-      audio.preload = "auto";
-      audio.addEventListener("error", () => undefined);
-    });
+    if (!AudioContextConstructor) {
+      setLastTestStatus("failed");
+      soundLog("error:", "AudioContext is not supported");
+      return false;
+    }
 
-    return () => {
-      audioRefs.current = {};
-    };
-  }, [enabled, soundEnabled]);
-
-  const unlockAudio = useCallback(() => {
-    if (!soundEnabled) return;
-    const unlockAttempts = Object.values(audioRefs.current).map(async (audio) => {
-      if (!audio) return;
-      try {
-        audio.muted = true;
-        await audio.play();
-        audio.pause();
-        audio.currentTime = 0;
-        audio.muted = false;
-      } catch {
-        audio.muted = false;
+    try {
+      if (!sharedAudioContext || sharedAudioContext.state === "closed") {
+        sharedAudioContext = new AudioContextConstructor();
       }
-    });
 
-    void Promise.allSettled(unlockAttempts).then(() => setIsAudioUnlocked(true));
-  }, [soundEnabled]);
+      audioContextRef.current = sharedAudioContext;
+      soundLog("context state:", sharedAudioContext.state);
+      await sharedAudioContext.resume();
+      soundLog("resume result:", sharedAudioContext.state);
+      setAudioState(sharedAudioContext.state);
 
-  useEffect(() => {
-    if (!enabled || !soundEnabled || isAudioUnlocked) return;
-    const unlock = () => unlockAudio();
-    window.addEventListener("pointerdown", unlock);
-    window.addEventListener("keydown", unlock);
-    return () => {
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
-    };
-  }, [enabled, isAudioUnlocked, soundEnabled, unlockAudio]);
+      if (sharedAudioContext.state !== "running") {
+        setLastTestStatus("failed");
+        return false;
+      }
+
+      soundLog(`test started ${label}`);
+      const oscillator = sharedAudioContext.createOscillator();
+      const gain = sharedAudioContext.createGain();
+      const now = sharedAudioContext.currentTime;
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(sound === "new" ? 860 : sound === "warning" ? 740 : 700, now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(sound === "new" ? 0.22 : 0.18, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+      oscillator.connect(gain);
+      gain.connect(sharedAudioContext.destination);
+
+      await new Promise<void>((resolve) => {
+        oscillator.onended = () => {
+          soundLog(`test ended ${label}`);
+          resolve();
+        };
+        oscillator.start(now);
+        oscillator.stop(now + 0.36);
+      });
+
+      setAudioState(sharedAudioContext.state);
+      setLastTestStatus("success");
+      return true;
+    } catch (error) {
+      setAudioState(sharedAudioContext?.state ?? "none");
+      setLastTestStatus("failed");
+      soundLog("error:", error);
+      return false;
+    }
+  }, [soundAvailable]);
+
+  const unlockAudio = useCallback(async () => {
+    if (!soundAvailable) return false;
+    const didPlay = await playWebAudioBeep("new", `${role}_unlock`);
+    if (!didPlay || sharedAudioContext?.state !== "running") {
+      return false;
+    }
+
+    window.localStorage.setItem(soundPreferenceKey, "true");
+    setSoundPreferred(true);
+    setAudioState(sharedAudioContext.state);
+    soundLog("unlocked");
+    return true;
+  }, [playWebAudioBeep, role, soundAvailable]);
 
   const playSound = useCallback(
-    (sound: OperationalNotification["sound"]) => {
-      if (!soundEnabled || !isAudioUnlocked || sound === "none") return;
+    (sound: OperationalNotification["sound"], label: string = sound) => {
+      const context = sharedAudioContext ?? audioContextRef.current;
+      if (!soundAvailable || sound === "none") return;
+      if (!context || context.state !== "running") {
+        setAudioState(context?.state ?? "none");
+        soundLog("blocked", { label, state: context?.state ?? "none" });
+        return;
+      }
+
+      soundLog(`play ${label}`);
       audioQueueRef.current = audioQueueRef.current
         .catch(() => undefined)
         .then(async () => {
-          const audio = audioRefs.current[sound];
-          if (!audio) return;
-          try {
-            audio.currentTime = 0;
-            await audio.play();
-            await new Promise((resolve) => window.setTimeout(resolve, 350));
-          } catch {
-            return;
-          }
+          await playWebAudioBeep(sound, label);
         });
     },
-    [isAudioUnlocked, soundEnabled],
+    [playWebAudioBeep, soundAvailable],
   );
 
   const refreshBadges = useCallback(async () => {
@@ -383,13 +425,17 @@ export function useOperationalNotifications({ role, station, enabled = true, vis
   const emitNotification = useCallback(
     (notification: OperationalNotification) => {
       if (!notification.roleTargets.includes(role)) return;
-      const showActivationHint = soundEnabled && !isAudioUnlocked && shouldShowActivationHint(role);
+      const context = sharedAudioContext ?? audioContextRef.current;
+      const isRunning = context?.state === "running";
+      const showActivationHint = soundAvailable && !isRunning;
       setToast(toastFromNotification(notification, showActivationHint));
       if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
       toastTimerRef.current = window.setTimeout(() => setToast(null), 4200);
-      playSound(notification.sound);
+      if (isRunning) {
+        playSound(notification.sound, notification.type);
+      }
     },
-    [isAudioUnlocked, playSound, role, soundEnabled],
+    [playSound, role, soundAvailable],
   );
 
   const resolveOrderNotificationInfo = useCallback(async (orderId: string) => {
@@ -447,6 +493,23 @@ export function useOperationalNotifications({ role, station, enabled = true, vis
       emitNotification(notificationFromOrderEvent(role, type, row.order_id, info));
     },
     [emitNotification, orderMatchesStation, resolveOrderNotificationInfo, role],
+  );
+
+  const handleOrderItemStatusEvent = useCallback(
+    async (row: OrderItemStatusEventRow) => {
+      const type = itemEventTypeForRole(row, role);
+      if (!type) return;
+
+      const info = await resolveOrderNotificationInfo(row.order_id);
+      const dedupeKey = `${role}:${type}:${row.order_id}:${row.order_item_id}:${row.to_status}:${row.id ?? row.created_at}`;
+      if (handledEventsRef.current.has(dedupeKey) || wasEventHandled(dedupeKey)) return;
+
+      handledEventsRef.current.add(dedupeKey);
+      markEventHandled(dedupeKey);
+      onRelevantEventRef.current?.({ type, orderId: row.order_id, tableSessionId: info.tableSessionId, roundNo: info.roundNo });
+      emitNotification(notificationFromOrderEvent(role, type, row.order_id, info));
+    },
+    [emitNotification, resolveOrderNotificationInfo, role],
   );
 
   const handleRequisitionInsert = useCallback(
@@ -583,6 +646,10 @@ export function useOperationalNotifications({ role, station, enabled = true, vis
         scheduleBadgeRefresh();
         void handleOrderStatusEvent(payload.new);
       })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_item_status_events" }, (payload: RealtimePostgresInsertPayload<OrderItemStatusEventRow>) => {
+        scheduleBadgeRefresh();
+        void handleOrderItemStatusEvent(payload.new);
+      })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "inventory_requisitions" }, (payload) => {
         scheduleBadgeRefresh();
         void handleRequisitionInsert((payload.new as { id?: string }).id);
@@ -623,6 +690,7 @@ export function useOperationalNotifications({ role, station, enabled = true, vis
   }, [
     enabled,
     handleCashShiftUpdate,
+    handleOrderItemStatusEvent,
     handleOrderStatusEvent,
     handlePurchaseRequestInsert,
     handlePurchaseRequestUpdate,
@@ -632,14 +700,26 @@ export function useOperationalNotifications({ role, station, enabled = true, vis
   ]);
 
   const activateSound = useCallback(() => {
-    unlockAudio();
+    void unlockAudio();
   }, [unlockAudio]);
+
+  const testSound = useCallback(() => {
+    void playWebAudioBeep("new", `${role}_test`).then((didPlay) => {
+      if (!didPlay || sharedAudioContext?.state !== "running") return;
+      window.localStorage.setItem(soundPreferenceKey, "true");
+      setSoundPreferred(true);
+    });
+  }, [playWebAudioBeep, role]);
 
   return useMemo(() => ({
     badges,
-    soundEnabled,
-    soundNeedsActivation: soundEnabled && !isAudioUnlocked,
+    soundEnabled: soundAvailable && audioState === "running",
+    soundNeedsActivation: soundAvailable && audioState !== "running",
+    soundPreferred,
+    audioState,
+    lastTestStatus,
     toast,
     toggleSound: activateSound,
-  }), [activateSound, badges, isAudioUnlocked, soundEnabled, toast]);
+    testSound,
+  }), [activateSound, audioState, badges, lastTestStatus, soundAvailable, soundPreferred, testSound, toast]);
 }

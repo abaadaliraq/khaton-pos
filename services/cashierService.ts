@@ -1,7 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import type { CashierOrder, CashierOrderRawStatus, CashierTable, CashierTableStatus, PaymentMethod } from "@/types/cashier";
+import type { CashierDailyKpis, CashierOrder, CashierOrderRawStatus, CashierTable, CashierTableStatus, PaymentMethod } from "@/types/cashier";
 
 type CashierOrderRow = {
   id: string;
@@ -43,6 +43,33 @@ type TableSessionRow = {
   table_id: string;
   status: "active" | "closed";
 };
+
+type DailyPaymentRow = {
+  id: string;
+  order_id: string;
+  amount: number | string;
+  status: "completed" | "voided";
+  created_at: string;
+};
+
+type DailyTipRow = {
+  amount: number | string;
+  created_at: string;
+};
+
+function asAmount(value: number | string | null | undefined) {
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function baghdadDayRange(date = new Date()) {
+  const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baghdad" }).format(date);
+  const [year, month, day] = dayKey.split("-").map(Number);
+  const start = new Date(Date.UTC(year, month - 1, day, -3, 0, 0, 0));
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
 
 function statusForTable(status: RestaurantTableRow["status"]): CashierTableStatus {
   if (status === "available") {
@@ -199,4 +226,42 @@ export async function getCashierTables(): Promise<CashierTable[]> {
       order: cashierOrder,
     };
   });
+}
+
+export async function getCashierDailyKpis(): Promise<CashierDailyKpis> {
+  const supabase = createClient();
+  const { start, end } = baghdadDayRange();
+
+  const [{ data: payments, error: paymentsError }, { data: tips, error: tipsError }] = await Promise.all([
+    supabase
+      .from("payments")
+      .select("id, order_id, amount, status, created_at")
+      .eq("status", "completed")
+      .gte("created_at", start)
+      .lt("created_at", end)
+      .limit(5000),
+    supabase
+      .from("payment_tips" as never)
+      .select("amount, created_at")
+      .gte("created_at", start)
+      .lt("created_at", end)
+      .limit(5000),
+  ]);
+
+  if (paymentsError) {
+    throw paymentsError;
+  }
+
+  if (tipsError) {
+    throw tipsError;
+  }
+
+  const paymentRows = (payments ?? []) as unknown as DailyPaymentRow[];
+  const paidOrderIds = new Set(paymentRows.map((payment) => payment.order_id));
+
+  return {
+    salesToday: paymentRows.reduce((total, payment) => total + asAmount(payment.amount), 0),
+    tipsToday: ((tips ?? []) as unknown as DailyTipRow[]).reduce((total, tip) => total + asAmount(tip.amount), 0),
+    paidInvoicesToday: paidOrderIds.size,
+  };
 }

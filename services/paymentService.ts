@@ -7,6 +7,7 @@ import type { PaymentMethod } from "@/types/cashier";
 type PaymentInput = {
   method: Exclude<PaymentMethod, "mixed">;
   amount: number;
+  tipAmount?: number;
   reference?: string;
 };
 
